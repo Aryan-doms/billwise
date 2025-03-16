@@ -57,23 +57,31 @@ if not DATABASE_URL:
     logger.error("DATABASE_URL environment variable is missing.")
     raise ValueError("DATABASE_URL environment variable is required")
 
-# Initialize database connection pool with optimized settings for Railway
-try:
-    db_pool = SimpleConnectionPool(
-        minconn=1,
-        maxconn=5,  # Reduced for Railway's container environment
-        dsn=DATABASE_URL,
-        keepalives=1,
-        keepalives_idle=30,
-        keepalives_interval=10,
-        keepalives_count=5
-    )
-    logger.info("Database connection pool initialized")
-except Exception as e:
-    logger.error(f"Database connection error: {e}")
-    raise
+# Replace existing database pool initialization with this
+db_pool = None
 
-# Replace with this pattern
+def init_db_pool():
+    global db_pool
+    if db_pool is None:
+        try:
+            db_pool = SimpleConnectionPool(
+                minconn=1,
+                maxconn=5,
+                dsn=DATABASE_URL,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5
+            )
+            logger.info("Database connection pool initialized")
+        except Exception as e:
+            logger.error(f"Database connection error: {e}")
+            raise
+
+@app.before_first_request
+def initialize():
+    init_db_pool()
+
 @app.before_request
 def init_db_connection():
     if not hasattr(g, 'db_pool'):
