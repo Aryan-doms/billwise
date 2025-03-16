@@ -73,20 +73,23 @@ except Exception as e:
     logger.error(f"Database connection error: {e}")
     raise
 
-# Add after database configuration
-@app.before_first_request
-def init_connection_pool():
-    global db_pool
-    try:
-        if not db_pool:
-            db_pool = SimpleConnectionPool(
+# Replace with this pattern
+@app.before_request
+def init_db_connection():
+    if not hasattr(g, 'db_pool'):
+        try:
+            g.db_pool = SimpleConnectionPool(
                 minconn=1,
                 maxconn=5,
-                dsn=DATABASE_URL
+                dsn=DATABASE_URL,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5
             )
-    except Exception as e:
-        logger.error(f"Failed to initialize connection pool: {e}")
-        raise
+        except Exception as e:
+            logger.error(f"Failed to initialize connection pool: {e}")
+            raise
 
 @app.teardown_appcontext
 def close_db_connection_pool(exception):
@@ -936,6 +939,5 @@ if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=False,
-        threaded=True
+        debug=False
     )
