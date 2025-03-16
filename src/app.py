@@ -17,6 +17,7 @@ import google.generativeai as genai
 import logging
 from functools import wraps
 import timeout_decorator
+from PyPDF2 import PdfReader
 
 # --- Configuration & Initialization ---
 app = Flask(__name__, static_folder='website/static', template_folder='website/templates')
@@ -542,9 +543,7 @@ def get_expense_breakdown():
     try:
         db = get_db()
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-            # Prepare the SQL query for expense breakdown
             cursor.execute("""
-                PREPARE get_expense_breakdown AS
                 WITH monthly_totals AS (
                     SELECT SUM(total_amount) as month_total
                     FROM Bill
@@ -558,17 +557,10 @@ def get_expense_breakdown():
                 FROM Bill
                 WHERE user_id = %s
                 AND date_trunc('month', invoice_date)::date = to_date(%s, 'YYYY-MM')
-                GROUP BY category;
-            """)
-
-            # Execute the prepared statement
-            cursor.execute("EXECUTE get_expense_breakdown (%s, %s, %s, %s)",
-                           (session['user_id'], selected_month, session['user_id'], selected_month))
+                GROUP BY category
+            """, (session['user_id'], selected_month, session['user_id'], selected_month))
 
             expenses = cursor.fetchall()
-
-            # Deallocate the prepared statement
-            cursor.execute("DEALLOCATE get_expense_breakdown")
 
             if not expenses:
                 return jsonify({
@@ -595,7 +587,6 @@ def get_expense_breakdown():
             'month_total': 0
         })
 
-
 @app.route('/get_recent_bills', methods=['GET'])
 def get_recent_bills():
     if 'user_id' not in session:
@@ -606,23 +597,15 @@ def get_recent_bills():
     try:
         db = get_db()
         with db.cursor() as cursor:
-            # Prepare the SQL query
             cursor.execute("""
-                PREPARE get_recent_bills AS
                 SELECT invoice_date::date, category, total_amount
                 FROM Bill
                 WHERE user_id = %s
                 AND to_char(invoice_date, 'YYYY-MM') = %s
-                ORDER BY invoice_date DESC;
-            """)
-
-            # Execute the prepared statement with the provided parameters
-            cursor.execute("EXECUTE get_recent_bills (%s, %s)", (session['user_id'], selected_month))
+                ORDER BY invoice_date DESC
+            """, (session['user_id'], selected_month))
 
             bills = cursor.fetchall()
-
-            # Deallocate the prepared statement
-            cursor.execute("DEALLOCATE get_recent_bills")
 
             bill_list = [{
                 'date': bill['invoice_date'].strftime('%Y-%m-%d'),
