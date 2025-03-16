@@ -1,1 +1,1 @@
-web: gunicorn "src.app:app" --timeout 120 --workers 2 --threads 2 --log-level info
+web: gunicorn "src.app:app" --workers 2 --threads 4 --timeout 120 --log-level info

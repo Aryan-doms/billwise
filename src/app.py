@@ -460,7 +460,6 @@ def dashboard():
         return redirect(url_for('login'))
 
 @app.route('/upload_bill', methods=['POST'])
-@handle_timeout
 def upload_bill():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -481,17 +480,19 @@ def upload_bill():
 
     try:
         bill_processor = BillProcessor()
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp_file:
+        
+        # Use a context manager for temporary files
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             file.save(tmp_file.name)
-            temp_file_path = tmp_file.name
-
-        try:
+            
             if file.filename.lower().endswith('.pdf'):
-                extracted_text = bill_processor.process_pdf(temp_file_path)
+                extracted_text = bill_processor.process_pdf(tmp_file.name)
             else:
-                with open(temp_file_path, 'rb') as img_file:
-                    extracted_text = bill_processor.process_image(img_file)
+                file.seek(0)  # Reset file pointer
+                extracted_text = bill_processor.process_image(file)
+
+            # Clean up temp file
+            os.unlink(tmp_file.name)
 
             if not extracted_text:
                 flash('Could not extract text from file', 'danger')
@@ -504,40 +505,30 @@ def upload_bill():
                 return redirect(url_for('dashboard'))
 
             db = get_db()
-            with db.cursor() as cursor:
-                # Use a prepared statement for inserting bills
-                cursor.execute("PREPARE insert_bill AS INSERT INTO Bill (user_id, total_amount, category, invoice_date, confidence_level) VALUES (%s, %s, %s, %s, %s) RETURNING bill_id")
-
-                for bill in results:
-                    if bill.get('total_amount') and bill.get('category'):
-                        # Execute the prepared statement with bill details
-                        cursor.execute("EXECUTE insert_bill (%s, %s, %s, %s, %s)", (
-                            session['user_id'],
-                            float(bill['total_amount']),
-                            bill['category'],
-                            bill['invoice_date'],
-                            bill['confidence']
-                        ))
-                db.commit()
-
-                # Deallocate the prepared statement after use
-                cursor.execute("DEALLOCATE insert_bill")
-                flash('Bill processed and stored successfully!', 'success')
-
-        except Exception as e:
-            logger.error(f"Error processing bill: {e}")
-            db.rollback()
-            flash(f'Error processing file: {str(e)}', 'danger')
-
-        finally:
             try:
-                os.remove(temp_file_path)
-            except OSError as e:
-                logger.warning(f"Error removing temporary file: {e}")
+                with db.cursor() as cursor:
+                    for bill in results:
+                        if bill.get('total_amount') and bill.get('category'):
+                            cursor.execute("""
+                                INSERT INTO Bill (user_id, total_amount, category, invoice_date, confidence_level)
+                                VALUES (%s, %s, %s, %s, %s)
+                            """, (
+                                session['user_id'],
+                                float(bill['total_amount']),
+                                bill['category'],
+                                bill['invoice_date'],
+                                bill['confidence']
+                            ))
+                db.commit()
+                flash('Bill processed and stored successfully!', 'success')
+            except Exception as db_error:
+                db.rollback()
+                logger.error(f"Database error: {db_error}")
+                flash('Error saving bill data', 'danger')
 
     except Exception as e:
-        logger.error(f"General error in upload_bill: {e}")
-        flash(f"Error during file upload: {str(e)}", "danger")
+        logger.error(f"Bill processing error: {e}")
+        flash('Error processing bill', 'danger')
 
     return redirect(url_for('dashboard'))
 
