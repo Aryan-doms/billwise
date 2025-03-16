@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Us - AI Bill Summarizer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for modern design */
+        body {
+            background: linear-gradient(to right, #6a11cb, #2575fc);
+            color: #ffffff;
+        }
+        .fade-in-up {
+            opacity: 0;
+            animation: fadeInUp 1s ease-in-out forwards;
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .neon-text {
+            color: #fff;
+            text-shadow: 0 0 5px #fff, 0 0 10px #ff00ff, 0 0 15px #ff00ff, 0 0 20px #ff00ff, 0 0 25px #ff00ff, 0 0 30px #ff00ff, 0 0 35px #ff00ff;
+        }
+    </style>
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+          const elements = document.querySelectorAll('.fade-in-up');
+          elements.forEach((el, index) => {
+              setTimeout(() => {
+                  el.classList.add('visible');
+              }, index * 300);
+          });
+      });
+    </script>
+</head>
+<body class="text-gray-800">
+    <!-- Header -->
+    <header class="bg-transparent text-white shadow-lg">
+        <div class="container mx-auto px-6 py-8 text-center fade-in-up">
+            <h1 class="text-6xl font-bold tracking-wide neon-text">About Us</h1>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-12 space-y-8">
+        <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+            <h2 class="text-4xl font-semibold text-white mb-4">Who We Are</h2>
+            <p class="text-white leading-relaxed">
+                Welcome to our AI Bill Summarizing Tool, a project designed to revolutionize financial management. Our advanced AI technology, including OCR and NLP, transforms uploaded bills into insightful summaries, making it easier than ever to keep track of your spending.
+            </p>
+        </section>
+
+        <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+            <h2 class="text-4xl font-semibold text-white mb-4">Our Mission</h2>
+            <p class="text-white leading-relaxed">
+                We aim to simplify the financial management process for individuals by providing a user-friendly platform that processes bills, categorizes expenses, and offers actionable insights to help maintain budgets.
+            </p>
+        </section>
+
+        <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+            <h2 class="text-4xl font-semibold text-white mb-4">Key Features</h2>
+            <ul class="list-disc list-inside text-white leading-relaxed">
+                <li class="mb-2">AI-driven extraction and summarization of bill data.</li>
+                <li class="mb-2">Automated expense categorization for enhanced financial clarity.</li>
+                <li class="mb-2">Visualize monthly spending with interactive charts.</li>
+                <li class="mb-2">Effortless budget setting and management.</li>
+            </ul>
+        </section>
+
+        <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+            <h2 class="text-4xl font-semibold text-white mb-4">The Developer</h2>
+            <p class="text-white leading-relaxed">
+                Hi! I'm Aryan, a Computer Science student passionate about AI and software development. This project is an exciting opportunity to explore AI's real-world applications.
+            </p>
+        </section>
+
+        <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 fade-in-up">
+            <h2 class="text-4xl font-semibold text-white mb-4">Contact Us</h2>
+            <p class="text-white leading-relaxed mb-4">
+                Have questions or feedback? Feel free to reach out!
+            </p>
+            <p class="text-white">
+                Email: <a href="mailto:acpatel2005@gmail.com" class="text-blue-300 hover:underline">acpatel2005@gmail.com</a>
+            </p>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-transparent text-white text-center py-6 mt-12">
+        <p>&copy; 2024 Billwise.com. All rights reserved.</p>
+    </footer>
+</body>
+</html>

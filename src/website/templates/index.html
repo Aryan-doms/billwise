@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BillWise - Smart Expense Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Body styling with animated gradient background */
+        body {
+            background: linear-gradient(45deg, #3b82f6, #1e40af, #2563eb, #3b82f6);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+        }
+    
+        /* Keyframe animation for gradient background */
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+    
+        /* Fade-in-up animation styling */
+        .fade-in-up {
+            opacity: 0;
+            animation: fadeInUp 1s ease-in-out forwards;
+        }
+    
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    
+        /* Page display management */
+        .page {
+            display: none;
+        }
+    
+        .page.active {
+            display: block;
+        }
+    
+        /* Floating icon animation styling */
+        .floating-icon {
+            animation: float 4s ease-in-out infinite;
+        }
+    
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+    </style>
+
+</head>
+<body class="text-white min-h-screen flex flex-col bg-blue-900">
+    <!-- Navigation -->
+    <nav class="bg-white/10 backdrop-blur-md shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+                <a href="{{ url_for('index')}}"><h1 class="text-2xl font-bold text-white">BillWise</h1></a> 
+                <nav class="hidden md:flex space-x-6">
+                    <button onclick="showPage('home')" class="hover:text-emerald-300 transition">Home</button>
+                    <button onclick="showPage('how-it-works')" class="hover:text-emerald-300 transition">How It Works</button>
+                    <button onclick="showPage('reviews')" class="hover:text-emerald-300 transition">Reviews</button>
+                    <button onclick="showPage('about')" class="hover:text-emerald-300 transition">About Us</button>
+                </nav>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="{{ url_for('dashboard') }}" class="bg-emerald-500 hover:bg-emerald-600 px-6 py-2 rounded-full transition">
+                    Get Started
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Home Page -->
+    <div id="home" class="page active flex-grow container mx-auto px-4 py-16 fade-in-up">
+        <!-- Hero Section -->
+        <div class="grid md:grid-cols-2 items-center gap-12 mb-24">
+            <div class="space-y-8">
+                <h2 class="text-5xl font-extrabold leading-tight">
+                    Your Smart <br/>
+                    <span class="text-emerald-400">Expense Companion</span>
+                </h2>
+                <p class="text-xl text-white/80">
+                    AI-powered bill tracking that transforms chaos into clarity. Upload, analyze, and master your finances effortlessly.
+                </p>
+                <div class="flex space-x-4">
+                    <a href="{{ url_for('dashboard') }}" class="bg-white text-blue-600 px-8 py-3 rounded-full font-semibold hover:bg-gray-100 transition">
+                        Upload Bill
+                    </a>                    
+                    <button onclick="showPage('how-it-works')" class="border border-white/50 px-8 py-3 rounded-full hover:bg-white/10 transition">
+                        Learn More
+                    </button>
+                </div>
+            </div>
+
+            <div class="relative">
+                <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 shadow-2xl">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-blue-500/20 p-4 rounded-lg floating-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0z" />
+                            </svg>
+                            <p class="text-center mt-2 text-sm text-blue-200">Bill Analysis</p>
+                        </div>
+                        <div class="bg-emerald-500/20 p-4 rounded-lg floating-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p class="text-center mt-2 text-sm text-emerald-200">Expense Tracking</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Features Section -->
+        <div class="bg-white/10 rounded-2xl p-12 mb-24">
+            <h3 class="text-3xl font-bold text-center mb-12">Why Choose BillWise?</h3>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="text-center">
+                    <div class="bg-blue-600/20 rounded-full w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-4">Summary</h4>
+                    <p class="text-white/80">Brifie summary of your expenses</p>
+                </div>
+                <div class="text-center">
+                    <div class="bg-emerald-600/20 rounded-full w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M13 5.5a4 4 0 00-4 4v6a4 4 0 104 4v-6a4 4 0 10-4-4z" />
+                        </svg>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-4">Save Money</h4>
+                    <p class="text-white/80">Identify spending patterns and find opportunities to cut unnecessary expenses.</p>
+                </div>
+                <div class="text-center">
+                    <div class="bg-purple-600/20 rounded-full w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                        </svg>
+                    </div>
+                    <h4 class="text-xl font-semibold mb-4">Smart Tracking</h4>
+                    <p class="text-white/80">Automated categorization and intelligent financial recommendations.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Call to Action -->
+        <div class="text-center bg-white/10 rounded-2xl p-16">
+            <h3 class="text-4xl font-bold mb-6">Ready to Take Control of Your Finances?</h3>
+            <p class="text-xl mb-8 text-white/80">Start your financial journey with BillWise today. It's quick, easy, and powerful.</p>
+            <a href="{{ url_for('dashboard') }}">
+                <button class="bg-emerald-500 hover:bg-emerald-600 px-10 py-4 rounded-full text-xl font-semibold transition">
+                    Get Started Now
+                </button>
+            </a>
+        </div>
+    </div>
+
+
+            <!-- Rest of the Home Page content remains the same -->
+        </div>
+
+        <!-- How It Works Page -->
+        <div id="how-it-works" class="page container mx-auto px-4 py-16 fade-in-up">
+            <div class="max-w-4xl mx-auto">
+                <h1 class="text-4xl font-bold mb-12 text-center">How BillWise Works</h1>
+                
+                <div class="space-y-12">
+                    <div class="bg-white/10 p-8 rounded-xl">
+                        <div class="flex items-center mb-6">
+                            <div class="bg-emerald-500 text-white rounded-full w-12 h-12 flex items-center justify-center mr-4">
+                                <span class="text-2xl font-bold">1</span>
+                            </div>
+                            <h2 class="text-2xl font-semibold">Upload Your Bill</h2>
+                        </div>
+                        <p class="text-white/80">
+                            Simply snap a photo or upload a digital copy of your bill. Our advanced AI technology can read and process various bill formats.
+                        </p>
+                    </div>
+
+                    <div class="bg-white/10 p-8 rounded-xl">
+                        <div class="flex items-center mb-6">
+                            <div class="bg-blue-500 text-white rounded-full w-12 h-12 flex items-center justify-center mr-4">
+                                <span class="text-2xl font-bold">2</span>
+                            </div>
+                            <h2 class="text-2xl font-semibold">AI-Powered Analysis</h2>
+                        </div>
+                        <p class="text-white/80">
+                            Our AI instantly extracts key information, categorizes expenses, and provides insights into your spending patterns.
+                        </p>
+                    </div>
+
+                    <div class="bg-white/10 p-8 rounded-xl">
+                        <div class="flex items-center mb-6">
+                            <div class="bg-purple-500 text-white rounded-full w-12 h-12 flex items-center justify-center mr-4">
+                                <span class="text-2xl font-bold">3</span>
+                            </div>
+                            <h2 class="text-2xl font-semibold">Comprehensive Reporting</h2>
+                        </div>
+                        <p class="text-white/80">
+                            Receive detailed expense reports, budget tracking, and personalized financial insights to help you make smarter spending decisions.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="text-center mt-16">
+                    <a href="{{ url_for('dashboard') }}" class="bg-emerald-500 hover:bg-emerald-600 px-10 py-4 rounded-full text-xl font-semibold transition">                    
+                     Get Started
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reviews Page -->
+        <div id="reviews" class="page container mx-auto px-4 py-16 fade-in-up">
+            <div class="max-w-4xl mx-auto">
+                <h1 class="text-4xl font-bold mb-12 text-center">What Our Users Say</h1>
+                
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div class="bg-white/10 p-8 rounded-xl">
+                        <div class="flex items-center mb-4">
+                            <div class="w-16 h-16 rounded-full mr-4 bg-gray-500">
+                                <img src="{{ url_for('static', filename='pfp.jpg') }}" alt="Profile Picture" class="w-full h-full rounded-full">
+                            </div>                           
+                            <div>
+                                <h3 class="font-semibold text-xl">Aryan</h3>
+                                <div class="text-yellow-400">★★★★★</div>
+                            </div>
+                        </div>
+                        <p class="text-white/80">
+                            "BillWise has completely transformed how I manage my expenses. The AI analysis is incredibly accurate and helps me stay on top of my spending!"
+                        </p>
+                    </div>
+
+                    <div class="bg-white/10 p-8 rounded-xl">
+                        <div class="flex items-center mb-4">
+                            <div class="w-16 h-16 rounded-full mr-4 bg-gray-500">
+                                <img src="{{ url_for('static', filename='pfp.jpg') }}" alt="Profile Picture" class="w-full h-full rounded-full">
+                            </div>                             <div>
+                                <h3 class="font-semibold text-xl">Kaavya</h3>
+                                <div class="text-yellow-400">★★★★☆</div>
+                            </div>
+                        </div>
+                        <p class="text-white/80">
+                            "As someone who struggles with budgeting, BillWise has been a game-changer. The detailed reports make it so easy to understand my spending habits."
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aboutus Page -->
+        <div id="about" class="page container mx-auto px-4 py-16">
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+                <h2 class="text-4xl font-semibold text-white mb-4">Who We Are</h2>
+                <p class="text-white leading-relaxed">
+                    Welcome to our AI Bill Summarizing Tool, a project designed to revolutionize financial management. Our advanced AI technology, including OCR and NLP, transforms uploaded bills into insightful summaries, making it easier than ever to keep track of your spending.
+                </p>
+            </section>
+    
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+                <h2 class="text-4xl font-semibold text-white mb-4">Our Mission</h2>
+                <p class="text-white leading-relaxed">
+                    We aim to simplify the financial management process for individuals by providing a user-friendly platform that processes bills, categorizes expenses, and offers actionable insights to help maintain budgets.
+                </p>
+            </section>
+    
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+                <h2 class="text-4xl font-semibold text-white mb-4">Key Features</h2>
+                <ul class="list-disc list-inside text-white leading-relaxed">
+                    <li class="mb-2">AI-driven extraction and summarization of bill data.</li>
+                    <li class="mb-2">Automated expense categorization for enhanced financial clarity.</li>
+                    <li class="mb-2">Visualize monthly spending with interactive charts.</li>
+                    <li class="mb-2">Effortless budget setting and management.</li>
+                </ul>
+            </section>
+    
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+                <h2 class="text-4xl font-semibold text-white mb-4">The Developer</h2>
+                <p class="text-white leading-relaxed">
+                    Hi! I'm Aryan, a Computer Science student passionate about AI and software development. This project is an exciting opportunity to explore AI's real-world applications.
+                </p>
+            </section>
+    
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 fade-in-up">
+                <h2 class="text-4xl font-semibold text-white mb-4">Contact Us</h2>
+                <p class="text-white leading-relaxed mb-4">
+                    Have questions or feedback? Feel free to reach out!
+                </p>
+                <p class="text-white">
+                    Email: <a href="mailto:acpatel2005@gmail.com" class="text-blue-300 hover:underline">acpatel2005@gmail.com</a>
+                </p>
+            </section>
+        </div>
+        </main>
+    
+
+    <script>
+        // Page Navigation Function
+        function showPage(pageId) {
+            console.log("Showing page:", pageId);
+            
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+                page.style.display = 'none';
+            });
+        
+            // Show selected page
+            const selectedPage = document.getElementById(pageId);
+            
+            if (selectedPage) {
+                selectedPage.classList.add('active');
+                selectedPage.style.display = 'block';
+                
+                // Scroll to top
+                window.scrollTo(0, 0);
+            } else {
+                console.error("Page not found:", pageId);
+            }
+        }
+
+        // Optional: File Upload Handler (placeholder)
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                alert('File selected: ' + file.name);
+                // Add your file upload logic here
+            }
+        }
+
+        // Ensure home page is active on load
+        document.addEventListener('DOMContentLoaded', () => {
+            showPage('home');
+        });
+    </script>
+</body>
+</html>

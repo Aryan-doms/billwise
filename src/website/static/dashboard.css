@@ -1,0 +1,222 @@
+/* Custom scrollbar */
+.scrollbar-custom::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-custom::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px; /* Optional: for smoother track appearance */
+}
+.scrollbar-custom::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+.scrollbar-custom::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Slide-in animation */
+@keyframes slide-in {
+  0% {
+      opacity: 0;
+      transform: translateY(-20px);
+  }
+  100% {
+      opacity: 1;
+      transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.5s ease-out forwards;
+}
+
+/* Budget Section */
+.budget-progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #f3f4f6;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.budget-progress-bar-filled {
+  height: 100%;
+  background-color: #3b82f6; /* Blue color */
+  text-align: center;
+  color: white;
+  font-size: 10px;
+  line-height: 10px;
+  border-radius: 10px;
+}
+
+/* Notes Section */
+#budget-notes {
+  background-color: #ffffff;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#budget-notes textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Alert Styles */
+.budget-alert {
+  background-color: #facc15; /* Yellow background */
+  padding: 16px;
+  border-radius: 8px;
+  color: #1f2937;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  
+  margin-bottom: 20px;
+}
+
+.budget-alert button {
+  background: transparent;
+  border: none;
+  color: #e11d48; /* Red color for dismiss button */
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  .budget-progress-bar {
+      height: 6px;
+  }
+
+  .budget-progress-bar-filled {
+      font-size: 8px;
+  }
+
+  #budget-notes textarea {
+      min-height: 80px;
+  }
+}
+
+/* General Layout */
+#budget-section {
+  padding: 20px;
+}
+
+#budget-section .grid {
+  gap: 20px;
+}
+
+.budget-card {
+  background-color: #ffffff;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.budget-card h4 {
+  font-size: 16px;
+  color: #6b7280;
+}
+
+.budget-card p {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* Button Styles */
+.btn {
+  background-color: #3b82f6;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+}
+
+.btn:hover {
+  background-color: #2563eb;
+  transition: background-color 0.3s ease;
+}
+
+.budget-alert button:hover {
+  color: #e11d48; /* Change color on hover */
+  text-decoration: underline;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Mobile Responsiveness Enhancements */
+@media (max-width: 768px) {
+
+  /* Budget Section Mobile Layout */
+  #budget-section .grid {
+      grid-template-columns: 1fr !important;
+      gap: 10px !important;
+  }
+
+  #budget-section .grid > div {
+      padding: 12px !important;
+      background-color: #f9fafb !important;
+      border-radius: 8px !important;
+  }
+
+  /* Smooth Sidebar Transition */
+  #sidebar {
+      transition: transform 0.3s ease-in-out;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Budget Alert Mobile Styling */
+  .budget-alert {
+      width: 90%;
+      margin: 10px auto;
+      flex-direction: column;
+      text-align: center;
+  }
+
+  .budget-alert button {
+      margin-top: 10px;
+  }
+}
+
+/* Animation for Sidebar and Content */
+@keyframes slideInLeft {
+  from {
+      transform: translateX(-100%);
+      opacity: 0;
+  }
+  to {
+      transform: translateX(0);
+      opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+      opacity: 0;
+  }
+  to {
+      opacity: 1;
+  }
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.5s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-in;
+}

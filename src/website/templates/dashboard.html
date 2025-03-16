@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BillWise Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+
+<body class="flex flex-col md:flex-row min-h-screen bg-gradient-to-br from-gray-100 to-gray-200">    
+    <!-- Mobile Menu Toggle -->
+    <button id="mobile-menu-toggle" class="md:hidden fixed top-4 left-4 z-50 p-3 bg-blue-500 text-white rounded-lg shadow-md">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    </button>
+    
+    <div id="sidebar" class="w-64 bg-white shadow-xl p-6 border-r border-gray-200 
+        fixed inset-y-0 left-0 transform 
+        -translate-x-full md:translate-x-0 
+        transition-transform duration-300 ease-in-out z-40">
+        <h1 class="text-2xl md:text-3xl font-extrabold mb-6 text-blue-600 tracking-tight">BillWise</h1>
+        <nav>
+            <ul class="space-y-2">
+                <li>
+                    <a href="#overview" 
+                       class="dashboard-tab flex items-center text-gray-700 hover:text-blue-600 hover:bg-blue-50 p-3 rounded-lg transition-all duration-200 ease-in-out" 
+                       data-target="overview">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                        </svg>
+                        Overview
+                    </a>
+                </li>
+                </li>
+                <li>
+                    <a href="#expenses" 
+                       class="dashboard-tab flex items-center text-gray-700 hover:text-blue-600 hover:bg-blue-50 p-3 rounded-lg transition-all duration-200 ease-in-out" 
+                       data-target="expenses">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Expenses
+                    </a>
+                </li>
+                <li>
+                    <a href="#budget" 
+                       class="dashboard-tab flex items-center text-gray-700 hover:text-blue-600 hover:bg-blue-50 p-3 rounded-lg transition-all duration-200 ease-in-out" 
+                       data-target="budget">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 100-4 2 2 0 000 4z" />
+                        </svg>
+                        Budget
+                    </a>
+                </li>
+                <li>
+                    <a href="#profile" 
+                       class="dashboard-tab flex items-center text-gray-700 hover:text-blue-600 hover:bg-blue-50 p-3 rounded-lg transition-all duration-200 ease-in-out" 
+                       data-target="profile">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14c4.418 0 8-2.239 8-5s-3.582-5-8-5-8 2.239-8 5 3.582 5 8 5zm0 0v5m0 0H9m3 0h3" />
+                        </svg>
+                        Profile
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    
+    <main class="flex-1 p-4 md:p-8 md:ml-64 overflow-x-hidden">
+        <!--alert for 80% budget-->
+        {% if notify_flag %}
+        <div id="budget-alert" 
+            class="absolute top-6 right-6 bg-gradient-to-r from-red-500 to-red-600 text-white shadow-xl rounded-lg p-5 w-96 z-50 animate-slide-in transform transition hover:scale-105">
+            <div class="flex items-start">
+                <div class="p-3 bg-white rounded-full shadow-lg">
+                    <span class="text-red-500 text-2xl font-bold">⚠️</span>
+                </div>
+                <div class="ml-4 flex-1">
+                    <h4 class="font-bold text-lg mb-1">Budget Alert!</h4>
+                    <p class="text-sm leading-5">
+                        Whoa, {{ username }}! You’ve hit <strong>80%</strong> of your monthly budget. slow down blud.
+                    </p>
+                </div>
+                <button onclick="closeBudgetAlert()" 
+                        class="text-white bg-red-700 hover:bg-red-800 px-3 py-1 ml-4 rounded-full text-sm font-medium shadow-md transition">
+                    Close
+                </button>
+            </div>
+        </div>
+        {% endif %}
+        <!-- Overview section -->      
+        <main class="flex-1 p-8 space-y-6 overflow-y-auto scrollbar-custom">
+            <section id="overview-section" class="section dashboard-content">
+                <h2 class="text-3xl font-bold mb-6 text-gray-800">Dashboard Overview</h2>
+        
+                <!--Monthly-->  
+                <h5 class="text-2xl font-bold mb-6 text-gray-800">Monthly Expenses</h5>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
+                        <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Total Spent</h3>
+                        <p class="text-base md:text-2xl font-bold text-blue-600">₹{{ total_sum }}</p>
+                    </div>
+                    <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center">
+                        <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget</h3>
+                        <p id="curr-budget" class="text-base md:text-2xl font-bold text-blue-600"></p>
+                    </div>                    
+                    <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
+                        <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Remaining</h3>
+                        <p class="text-base md:text-2xl font-bold text-green-600">₹{{ budget_remaining }}</p>
+                    </div>
+                    <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
+                        <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Used</h3>
+                        <p class="text-base md:text-2xl font-bold text-red-600">{{ budget_percentage }}%</p>
+                    </div>
+                </div>
+                
+                
+
+                <!-- Yearly Content -->
+                    <h2 class="text-2xl font-bold mb-6">Yearly Budget Overview</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
+                            <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Total Spent</h3>
+                            <p class="text-base md:text-2xl font-bold text-blue-600">₹{{ yearly_expenses }}</p>
+                        </div>
+                        <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
+                            <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Total Budget</h3>
+                            <p class="text-base md:text-2xl font-bold text-blue-600">₹{{ yearly_budget }}</p>
+                        </div>
+                        <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
+                            <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Remaining</h3>
+                            <p class="text-base md:text-2xl font-bold text-green-600">₹{{ yearly_remaining }}</p>
+                        </div>
+                        <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
+                            <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Used</h3>
+                            <p class="text-base md:text-2xl font-bold text-red-600">{{ budget_yearpercentage }}%</p>
+                        </div>
+                    </div>
+                
+                
+                <div class="bg-white shadow-md rounded-xl p-6 mb-6">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Upload New Bill</h3>
+                    <form action="/upload_bill" method="POST" enctype="multipart/form-data" class="flex items-center space-x-4">
+                        <input type="file" name="bill_file" accept=".pdf,.jpg,.jpeg,.png" required 
+                               class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        <button type="submit" 
+                                class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition duration-300 ease-in-out transform hover:scale-105">
+                            Upload
+                        </button>
+                    </form>
+                </div>
+            </section>
+        
+        <!-- Summary Section -->
+        <section id="expenses-section" class="section dashboard-content hidden">
+            <h2 class="text-3xl font-bold mb-6 text-gray-800">
+                Expense Breakdown 
+                <div class="mb-4">
+                    <label for="month-select" class="block text-sm font-medium text-gray-700">Select Month</label>
+                    <select id="month-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md">
+                        {% for month_value, month_label in month_options %}
+                            <option value="{{ month_value }}" {% if month_value == current_month %}selected{% endif %}>
+                                {{ month_label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </h2>         
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white shadow-md rounded-lg p-6">
+                    <h3 class="text-xl font-semibold mb-4">Expenses by Category</h3>
+                    <div id="expense-chart"></div>
+                </div>
+                <div class="bg-white shadow-md rounded-lg p-6">
+                    <h3 class="text-xl font-semibold mb-4">Recent Bills</h3>
+                    <div class="scrollable-table-container" style="max-height: 200px; overflow-y: auto;">
+                        <table class="table-auto w-full border-collapse">
+                            <thead>
+                                <tr>
+                                    <th class="text-left py-2">Date</th>
+                                    <th class="text-left py-2">Category</th>
+                                    <th class="text-right py-2">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-bills-tbody">
+                                <!-- Rows will be dynamically inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <br>
+
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="bg-white shadow-md rounded-lg p-4 text-center">
+                            <h3 class="text-lg font-semibold text-gray-600">Total Spent</h3>
+                            <div id="monthly-expense-total" class="text-lg font-semibold">₹0.00</div>
+
+                        </div>
+                        <div class="bg-white shadow-md rounded-lg p-4 text-center">
+                            <h3 class="text-lg font-semWibold text-gray-600">Budget</h3>
+                            <div id="monthly-budget" class="text-lg font-semibold">₹0.00</div>
+                        </div>
+                        <div class="bg-white shadow-md rounded-lg p-4 text-center">
+                            <h3 class="text-lg font-semibold text-gray-600">Saving</h3>
+                            <div id="SelectSavings" class="text-lg font-semibold">₹0.00</div>
+                        </div>
+                        <div class="bg-white shadow-md rounded-lg p-4 text-center">
+                            <h3 class="text-lg font-semibold text-gray-600">Highest Spend</h3>
+                            <div id="highest-spend" class="text-lg font-semibold">
+                                Category&nbsp;: <span>₹0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div> <br>
+            </div>  
+                <div class="bg-white shadow-md rounded-lg p-6">
+                    <h3 class="text-xl font-semibold mb-4">Monthly Spending Breakdown</h3>
+                    <canvas id="stackedBarChart"></canvas>
+                </div>          
+            </div>
+        </section>
+
+        <!--Budget Section-->
+        <section id="budget-section" class="section dashboard-content hidden">
+            <h2 class="text-2xl font-bold mb-6">Budget Management</h2>
+            <div class="bg-blue-50 shadow-md rounded-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold">Monthly Budget</h3>
+                    <button id="edit-budget-btn" class="bg-blue-500 text-white px-4 py-2 rounded">Set Budget</button>
+                </div>
+                <div class="grid grid-cols-3 gap-4 text-center">
+                    <div class="bg-white rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-600">Total Budget</h4>
+                        <p id="budget-display" class="text-lg font-semibold text-gray-600"></p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-600">Spent Amount</h4>
+                        <p class="text-lg font-semibold text-gray-600">₹{{ total_sum }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-600">Remaining</h4>
+                        <p class="text-lg font-semibold text-gray-600">₹{{ budget_remaining }}</p>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <!-- Progress Bar -->
+                <div class="bg-white rounded-lg p-4 mt-4">
+                    <h4 class="text-lg font-semibold text-gray-600">Budget Usage</h4>
+                    <div class="w-full bg-gray-200 rounded-full">
+                        <!-- Conditional color change based on budget percentage -->
+                        <div class="text-xs font-medium text-white text-center p-1 leading-none rounded-full"
+                            style="width: {{ budget_percentage if budget_percentage <= 100 else 100 }}%; background: {{ '#ef4444' if budget_percentage > 80 else 'linear-gradient(to right, #6366f1, #ef4444)' }};">
+                            {{ budget_percentage if budget_percentage <= 100 else 100 }}%
+                        </div>
+                    </div>
+                </div>
+
+
+        
+                <!-- Notes Section -->
+                <div class="bg-white rounded-lg p-4 mt-4">
+                    <h4 class="text-lg font-semibold text-gray-600">Notes</h4>
+                    <textarea class="w-full p-2 border border-gray-300 rounded" placeholder="Add a note about your budget..."></textarea>
+                </div>
+                <br>
+                
+                <!-- Budget Alert -->
+                {% if budget_percentage >= 80 %}
+                <div class="bg-blue-100 text-blue-800 py-3 px-6 rounded-lg mb-6 shadow-md">
+                    <p class="text-lg font-semibold">Warning: You've used {{ budget_percentage }}% of your budget!</p>
+                    <button class="text-blue-500" onclick="this.parentElement.style.display='none'">Dismiss</button>
+                </div>
+                {% endif %}
+            </div>
+        </section>       
+        
+        <!--Profile Section-->
+        <section id="profile-section" class="section dashboard-content hidden">
+            <h2 class="text-3xl font-bold mb-6 text-gray-800">Profile</h2>
+            <div class="bg-white shadow-md rounded-xl p-6 mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">Your Profile</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600">Profile Picture</label>
+                        {% if image_data %}
+                            <div class="w-32 h-32 rounded-full overflow-hidden">
+                                <img src="data:image/jpeg;base64,{{ image_data }}" alt="Profile Picture" class="object-cover w-full h-full">
+                            </div>
+                        {% else %}
+                            <p>No profile picture available.</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600">Name</label>
+                        <p class="text-lg text-gray-800">{{ username }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600">Email</label>
+                        <p class="text-lg text-gray-800">{{ email }}</p>
+                    </div>
+        
+                    <!-- Edit Profile Button -->
+                    <div class="mt-4">
+                        <button id="edit-profile-btn" class="bg-blue-500 text-white px-4 py-2 rounded-lg">Edit Profile</button>
+                    </div>
+                    <!-- Logout Button -->
+                    <div class="mt-4">
+                        <form action="{{ url_for('logout') }}" method="POST">
+                            <button type="submit" class="bg-red-500 text-white px-4 py-2 rounded-lg">
+                                Logout
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+                        
+        </section>
+        
+        <!-- Modal for Editing Profile -->
+        <div id="edit-profile-modal" class="fixed inset-0 bg-gray-500 bg-opacity-50 flex justify-center items-center hidden">
+            <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Edit Profile</h3>
+        
+                <!-- Form for uploading profile picture and changing name -->
+                <form action="{{ url_for('update_profile') }}" method="POST" enctype="multipart/form-data">
+                    <!-- Optional Profile Picture -->
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-600">Change Profile Picture</label>
+                        <input type="file" name="profile_picture" accept="image/*" class="mt-1 block w-full text-sm text-gray-800">
+                    </div>
+                    
+                  <!-- Optional Name -->
+                  <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-600">Change Name</label>
+                    <input 
+                        type="text" 
+                        name="name" 
+                        value="{{ username }}" 
+                        maxlength="32" 
+                        class="mt-1 block w-full text-sm text-gray-800 border border-black-500 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    <small id="username-helper" class="text-gray-500">Max 32 characters allowed.</small>
+                </div>
+                    
+                    <!-- Error Messages -->
+                    {% if error %}
+                        <div class="text-red-500 text-sm mt-2">{{ error }}</div>
+                    {% endif %}
+                    
+                    <div class="mt-4">
+                        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-lg">Update Profile</button>
+                    </div>
+                </form>
+                
+                <!-- Close button for the modal -->
+                <button id="close-modal-btn" class="mt-4 text-red-500">Close</button>
+            </div>
+        </div>
+        
+
+    </main>
+
+    <!-- Replace the existing budget modal div with this simplified version -->
+    <div id="budget-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 class="text-xl md:text-2xl font-bold mb-4 text-gray-800">Set Monthly Budget</h2>
+            <!-- Simple form with POST method -->
+            <form method="POST" action="/set_budget">
+                <div class="space-y-4">
+                    <input type="number" 
+                           name="budget" 
+                           placeholder="Budget Amount (₹)" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                           required
+                           min="0"
+                           max="10000000">
+                    <div class="flex justify-end space-x-4">
+                        <button type="button" 
+                                onclick="document.getElementById('budget-modal').classList.add('hidden')"
+                                class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition duration-300">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-300">
+                            Save Budget
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        //--- DOM Element Cache ---
+        const tabs = document.querySelectorAll('.dashboard-tab');
+        const sections = document.querySelectorAll('.dashboard-content');
+        const monthSelect = document.getElementById('month-select');
+        const uploadBillSection = document.querySelector('#upload-new-bill');
+        const billUploadForm = document.getElementById('bill-upload-form');
+        const editBudgetBtn = document.getElementById('edit-budget-btn');
+        const budgetModal = document.getElementById('budget-modal');
+        const cancelBudgetBtn = document.getElementById('cancel-budget-btn');
+        const budgetForm = document.getElementById('budget-form');
+        const totalExpenseElement = document.getElementById('monthly-expense-total');
+        const budgetElement = document.querySelector('#monthly-budget');
+        const totalSumElement = document.querySelector('#SelectSavings');
+        const expenseChart = document.getElementById('expense-chart');
+        const tableBody = document.querySelector('.scrollable-table-container table tbody');
+        const stackedBarChartCtx = document.getElementById('stackedBarChart').getContext('2d');
+        const editProfileBtn = document.getElementById('edit-profile-btn');
+        const editProfileModal = document.getElementById('edit-profile-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+        const sidebar = document.getElementById('sidebar');
+
+        //--- Data from Template ---
+        const months = JSON.parse('{{ months | tojson | safe }}');
+        const expenses = JSON.parse('{{ expenses | tojson | safe }}');
+        const savings = JSON.parse('{{ savings | tojson | safe }}');
+        const currentMonth = monthSelect ? monthSelect.value : '{{ current_month }}';
+
+        //--- Chart Initialization ---
+        initStackedBarChart(months, expenses, savings);
+
+        //--- Mobile Menu ---
+        mobileMenuToggle.addEventListener('click', function() {
+            sidebar.classList.toggle('-translate-x-full');
+        });
+
+        document.addEventListener('click', function(event) {
+            if (!sidebar.contains(event.target) &&
+                !mobileMenuToggle.contains(event.target) &&
+                window.innerWidth < 768) {
+                sidebar.classList.add('-translate-x-full');
+            }
+        });
+
+        //--- Tab Navigation ---
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => handleTabClick(tab));
+        });
+
+        //--- Initial Dashboard Update ---
+        if (currentMonth) {
+            updateDashboard(currentMonth);
+        }
+
+        //--- Event Listeners ---
+        if (monthSelect) {
+            monthSelect.addEventListener('change', (e) => updateDashboard(e.target.value));
+        }
+
+        if (uploadBillSection) {
+            uploadBillSection.addEventListener('click', () => toggleClass(billUploadForm, 'hidden'));
+        }
+
+        if (editBudgetBtn) {
+            editBudgetBtn.addEventListener('click', () => toggleClass(budgetModal, 'hidden', 'flex'));
+        }
+
+        if (cancelBudgetBtn) {
+            cancelBudgetBtn.addEventListener('click', () => toggleClass(budgetModal, 'flex', 'hidden'));
+        }
+
+        const budgetAmountInput = document.getElementById('budget-amount');
+        if (budgetAmountInput) {
+            budgetAmountInput.addEventListener('input', (e) => enforceMaxBudget(e));
+        }
+
+        if (budgetForm) {
+            budgetForm.addEventListener('submit', handleBudgetFormSubmit);
+        }
+
+        if (editProfileBtn && editProfileModal && closeModalBtn) {
+            editProfileBtn.addEventListener('click', () => toggleClass(editProfileModal, 'hidden', 'flex'));
+            closeModalBtn.addEventListener('click', () => toggleClass(editProfileModal, 'flex', 'hidden'));
+        }
+
+        //--- Data Fetching and Rendering Functions ---
+
+        function updateExpenseBreakdownChart(selectedMonth) {
+            fetch(`/get_expense_breakdown?month=${selectedMonth}`)
+                .then(response => response.json())
+                .then(data => renderExpenseChart(data))
+                .catch(() => renderErrorMessage(expenseChart, 'No expenses for this month'));
+        }
+
+        function updateRecentBillsTable(selectedMonth) {
+            fetch(`/get_recent_bills?month=${selectedMonth}`)
+                .then(response => response.json())
+                .then(data => renderBillsTable(data))
+                .catch(() => renderErrorMessage(tableBody, 'Error loading bills'));
+        }
+
+        function updateMonthlyExpenseTotal(selectedMonth) {
+            fetch(`/get_monthly_expense_total?month=${selectedMonth}`)
+                .then(response => response.json())
+                .then(data => {
+                    totalExpenseElement.textContent = data.error ? 'Error loading total expense' : `₹${data.total_expense.toFixed(2)}`;
+                    calculateMonthlySum();
+                })
+                .catch(() => totalExpenseElement.textContent = 'Error loading total expense');
+        }
+
+        function updateBudgetInformation(selectedMonth) {
+            fetch(`/get_budget_for_selectmonth?month=${selectedMonth}`)
+                .then(response => response.json())
+                .then(data => {
+                    budgetElement.textContent = `₹${data['monthly-budget'].toFixed(2)}`;
+                    calculateMonthlySum();
+                })
+                .catch(() => console.error('Error fetching budget information'));
+        }
+
+        function fetchMonthlyBudget() {
+            fetch('/get_monthly_budget')
+                .then(response => response.json())
+                .then(data => {
+                    const currBudgetElement = document.getElementById('curr-budget');
+                    const budgetDisplayElement = document.getElementById('budget-display');
+                    const monthlyBudgetDisplay = document.getElementById('monthly-budget');
+
+                    const formattedBudget = `₹${data.monthly_budget.toFixed(2)}`;
+
+                    if (currBudgetElement) {
+                        currBudgetElement.textContent = formattedBudget;
+                    }
+                    if (budgetDisplayElement) {
+                        budgetDisplayElement.textContent = formattedBudget;
+                    }
+
+                    if (monthlyBudgetDisplay) {
+                        monthlyBudgetDisplay.textContent = formattedBudget;
+                    }
+
+                    calculateMonthlySum();
+                })
+                .catch(error => console.error('Error fetching budget:', error));
+        }
+
+        // Recalculate Total Savings
+        function calculateMonthlySum() {
+            const expense = parseFloat(totalExpenseElement.textContent.replace(/₹|,/g, '') || 0);
+            const budget = parseFloat(budgetElement.textContent.replace(/₹|,/g, '') || 0);
+            const total = budget - expense;
+            if (totalSumElement) {
+                totalSumElement.textContent = `₹${total.toFixed(2)}`;
+            }
+        }
+
+        //--- Helper Functions ---
+        function handleTabClick(tab) {
+            const target = tab.getAttribute('data-target');
+            tabs.forEach(t => t.classList.remove('active'));
+            sections.forEach(s => s.classList.add('hidden'));
+            tab.classList.add('active');
+            document.getElementById(`${target}-section`).classList.remove('hidden');
+
+            if (target === 'summary' && currentMonth) {
+                updateDashboard(currentMonth);
+            }
+        }
+
+        function updateDashboard(selectedMonth) {
+            updateExpenseBreakdownChart(selectedMonth);
+            updateRecentBillsTable(selectedMonth);
+            updateMonthlyExpenseTotal(selectedMonth);
+            updateBudgetInformation(selectedMonth);
+        }
+
+        function renderExpenseChart(data) {
+            expenseChart.innerHTML = data.category.length === 0
+                ? '<p class="text-center text-gray-500">No expenses for this month</p>'
+                : '';
+            const canvas = document.createElement('canvas');
+            expenseChart.appendChild(canvas);
+            new Chart(canvas, {
+                type: 'pie',
+                data: {
+                    labels: data.category.map((cat, idx) => `${cat} (₹${data.total_amount[idx].toFixed(2)})`),
+                    datasets: [{
+                        data: data.total_amount,
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: `Expense Breakdown (Total: ₹${data.month_total.toFixed(2)})` } }
+                }
+            });
+        }
+
+        function renderBillsTable(data) {
+            tableBody.innerHTML = data.bills.length === 0
+                ? '<tr><td colspan="3" class="text-center text-gray-500">No bills for this month</td></tr>'
+                : data.bills.map(bill => {
+                    const formattedDate = formatDate(bill.date);
+                    return `
+                        <tr>
+                            <td>${formattedDate}</td>
+                            <td>${bill.category}</td>
+                            <td class="text-right">₹${bill.amount.toFixed(2)}</td>
+                        </tr>`;
+                }).join('');
+        }
+
+        function formatDate(dateString) {
+            const [year, month, day] = dateString.split('-');
+            return `${day}-${month}-${year}`;
+        }
+
+        function renderErrorMessage(element, message) {
+            element.innerHTML = `<p class="text-center text-red-500">${message}</p>`;
+        }
+
+        function toggleClass(element, removeClass, addClass) {
+            if (element) {
+                element.classList.remove(removeClass);
+                element.classList.add(addClass);
+            }
+        }
+
+        function enforceMaxBudget(event) {
+            const value = parseFloat(event.target.value);
+            if (value > 10000000) {
+                event.target.value = 10000000;
+            }
+        }
+
+        function handleBudgetFormSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(budgetForm);
+            const budgetAmount = formData.get('budget');
+
+            fetch('/set_budget', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.ok ? response.json() : Promise.reject('Failed to set budget'))
+                .then(() => {
+                    toggleClass(budgetModal, 'flex', 'hidden');
+                    alert(`Budget of ₹${parseFloat(budgetAmount).toLocaleString()} set successfully!`);
+                    updateDashboard(currentMonth);
+                })
+                .catch(error => alert(error));
+        }
+
+        function initStackedBarChart(months, expenses, savings) {
+            new Chart(stackedBarChartCtx, {
+                type: 'bar',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: 'Expenses',
+                            data: expenses,
+                            backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                        },
+                        {
+                            label: 'Savings',
+                            data: savings,
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            title: { display: true, text: 'Month' }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            title: { display: true, text: 'Amount' }
+                        }
+                    }
+                }
+            });
+        }
+        // calling function 
+        fetchMonthlyBudget();
+    });
+
+    //--- Budget Alert Functions ---
+    function closeBudgetAlert() {
+        const alert = document.getElementById('budget-alert');
+        if (alert) {
+            alert.style.display = 'none';
+        }
+    }
+
+    const sections = document.querySelectorAll('.dashboard-tab');
+    sections.forEach((section) => {
+        section.addEventListener('click', () => {
+            const alert = document.getElementById('budget-alert');
+            if (alert && section.dataset.section !== 'overview') {
+                alert.style.display = 'none';
+            }
+        });
+    });
+
+    //--- Highest Spend Functions ---
+    document.addEventListener('DOMContentLoaded', function () {
+        const monthSelect = document.getElementById('month-select');
+
+        // Function to fetch the highest spend for a given month
+        function fetchHighestSpend(month) {
+            const userId = 1; // Assuming user_id is 1 (you can dynamically set this based on logged-in user)
+
+            // Make a POST request to fetch data for the selected month
+            fetch('/monthly-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month: month, user_id: userId }) // Include user_id
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const highestSpendDiv = document.getElementById('highest-spend');
+
+                // Update the "Highest Spend" section with data or a placeholder
+                if (data.highest_category) {
+                    const { category, total_spent } = data.highest_category;
+
+                    // Ensure total_spent is a number and format it correctly
+                    highestSpendDiv.innerText = `${category}: ₹${parseFloat(total_spent).toFixed(2)}`;
+                } else {
+                    highestSpendDiv.innerText = "No data available.";
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching monthly summary:', error);
+            });
+        }
+        if(monthSelect){
+             // Get the current month in 'YYYY-MM' format
+            const currentMonth = new Date().toISOString().slice(0, 7); // Example: '2024-12'
+
+            // Set the current month as the selected value in the dropdown
+            monthSelect.value = currentMonth;
+
+            // Trigger the function to fetch the highest spend for the current month
+            fetchHighestSpend(currentMonth);
+            // Listen for month changes and update accordingly
+            monthSelect.addEventListener('change', function () {
+                const selectedMonth = this.value; // Get selected month in 'YYYY-MM' format
+                fetchHighestSpend(selectedMonth);
+            });
+        }
+
+
+    });
+
+    //--- Progress Bar Functions ---
+    const budgetPercentage = JSON.parse('{{ budget_percentage | tojson | safe }}');
+
+    // Get the progress bar element by its ID
+    const progressBar = document.getElementById('progress-bar');
+
+    // Check if the budget percentage is within the valid range (0-100)
+    if (progressBar){
+        if (budgetPercentage >= 0 && budgetPercentage <= 100) {
+            // Set the width of the progress bar based on the budget percentage
+            // Optionally update the text content inside the progress bar
+            progressBar.innerText = budgetPercentage + '%';
+        } else {
+            // If the value is invalid, set the width to 0% and display 0%
+            progressBar.style.width = '0%';
+            progressBar.innerText = '0%';
+        }
+    }
+
+
+    //--- Scroll to Expenses Section on Load ---
+    window.onload = function() {
+        // Check if the URL contains the hash "#expenses"
+        if (window.location.hash === "#expenses") {
+            const expensesSection = document.getElementById('expenses-section');
+            if (expensesSection) {
+                expensesSection.classList.remove('hidden'); // Show the expenses section
+                expensesSection.scrollIntoView({ behavior: "smooth" }); // Scroll to it smoothly
+            }
+        }
+    };
+
+
+    //--- Month Selection, Expense Chart, and Bills Table Functions (Refactored) ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const monthSelect = document.getElementById('month-select');
+        const stackedBarChartCtx = document.getElementById('stackedBarChart').getContext('2d');
+
+        // Function to handle month selection
+        function handleMonthSelection(selectedMonth) {
+            // Update expense breakdown chart
+            fetch(`/get_expense_breakdown?month=${selectedMonth}`)
+                .then(response => response.json())
+                .then(data => {
+                    renderExpenseChart(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching expense breakdown:', error);
+                    renderErrorMessage('No data available for selected month');
+                });
+
+            // Update recent bills
+            fetch(`/get_recent_bills?month=${selectedMonth}`)
+                .then(response => response.json())
+                .then(data => {
+                    renderBillsTable(data.bills || []);
+                })
+                .catch(error => {
+                    console.error('Error fetching recent bills:', error);
+                    renderErrorMessage('Unable to load recent bills');
+                });
+
+            // Update monthly expense total
+            fetch(`/get_monthly_expense_total?month=${selectedMonth}`)
+                .then(response => response.json())
+                .then(data => {
+                    const totalExpenseElement = document.getElementById('monthly-expense-total');
+                    totalExpenseElement.textContent = data.total_expense ?
+                        `₹${data.total_expense.toFixed(2)}` :
+                        'No expenses';
+                })
+                .catch(error => {
+                    console.error('Error fetching monthly expense:', error);
+                });
+
+            // Update highest spend
+            fetchHighestSpend(selectedMonth);
+        }
+
+        // Highest spend fetch function
+        function fetchHighestSpend(month) {
+            fetch('/monthly-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month: month })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const highestSpendDiv = document.getElementById('highest-spend');
+                if (data.highest_category) {
+                    const { category, total_spent } = data.highest_category;
+                    highestSpendDiv.innerHTML = `${category}: ₹${parseFloat(total_spent).toFixed(2)}`;
+                } else {
+                    highestSpendDiv.innerHTML = "No data available";
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching monthly summary:', error);
+            });
+        }
+
+        // Expense chart rendering function
+        function renderExpenseChart(data) {
+            const expenseChart = document.getElementById('expense-chart');
+            expenseChart.innerHTML = ''; // Clear previous chart
+
+            if (!data || data.category.length === 0) {
+                expenseChart.innerHTML = '<p class="text-center text-gray-500">No expenses for this month</p>';
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            expenseChart.appendChild(canvas);
+
+            new Chart(canvas, {
+                type: 'pie',
+                data: {
+                    labels: data.category.map((cat, idx) => `${cat} (₹${data.total_amount[idx].toFixed(2)})`),
+                    datasets: [{
+                        data: data.total_amount,
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56',
+                            '#4BC0C0', '#9966FF', '#FF9F40'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Expense Breakdown (Total: ₹${data.month_total.toFixed(2)})`
+                        }
+                    }
+                }
+            });
+        }
+
+        // Bills table rendering function
+        function renderBillsTable(bills) {
+            const tableBody = document.querySelector('#recent-bills-tbody');
+            tableBody.innerHTML = ''; // Clear previous bills
+
+            if (bills.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="3" class="text-center text-gray-500 py-4">
+                            No bills for this month
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            bills.forEach(bill => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatDate(bill.date)}</td>
+                    <td>${bill.category}</td>
+                    <td class="text-right">₹${bill.amount.toFixed(2)}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Date formatting function
+        function formatDate(dateString) {
+            const [year, month, day] = dateString.split('-');
+            return `${day}-${month}-${year}`;
+        }
+
+        // Error message rendering
+        function renderErrorMessage(message) {
+            const expenseChart = document.getElementById('expense-chart');
+            expenseChart.innerHTML = `
+                <p class="text-center text-red-500 py-4">${message}</p>
+            `;
+        }
+
+        // Initial load with current month
+        if(monthSelect){
+            const currentMonth = new Date().toISOString().slice(0, 7);
+            monthSelect.value = currentMonth;
+        }
+
+
+        // Add event listener for month selection
+        if(monthSelect){
+            monthSelect.addEventListener('change', function() {
+                const selectedMonth = this.value;
+                handleMonthSelection(selectedMonth);
+            });
+        }
+
+        // Trigger initial load
+        if(monthSelect){
+            const currentMonth = new Date().toISOString().slice(0, 7);
+            handleMonthSelection(currentMonth);
+        }
+
+    });
+</script>
+</body>
+</html>

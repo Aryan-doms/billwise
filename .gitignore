@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv/
+venv/
+ENV/
+
+# Flask
+instance/
+uploads/
+.webassets-cache
+
+# Vercel
+.vercel
+.now
+
+# Development
+.vscode/
+*.log
+google_credentials.json
+
+# System
+.DS_Store
+Thumbs.db
