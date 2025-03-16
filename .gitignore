@@ -1,28 +1,24 @@
+# Environment variables
+.env
+.env.*
+
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-.env
-.venv/
-venv/
-ENV/
+*.pyc
+*.pyo
+*.pyd
 
-# Flask
-instance/
+# Temporary files and uploads
 uploads/
-.webassets-cache
-
-# Vercel
-.vercel
-.now
-
-# Development
-.vscode/
+tmp/
 *.log
-google_credentials.json
 
-# System
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS specific files
 .DS_Store
 Thumbs.db

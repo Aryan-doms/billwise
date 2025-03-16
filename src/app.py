@@ -20,12 +20,13 @@ import logging
 from functools import wraps
 import timeout_decorator
 
-# Initialize Flask app
+# Initialize Flask app with Railway-optimized settings
 app = Flask(__name__,
             static_folder='website/static',
             template_folder='website/templates')
 
-app.secret_key = os.urandom(24)
+# Use environment variable for secret key
+app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO,
@@ -67,7 +68,7 @@ try:
         keepalives_interval=10,
         keepalives_count=5
     )
-    logger.info("Database connection pool initialized.")
+    logger.info("Database connection pool initialized")
 except Exception as e:
     logger.error(f"Database connection error: {e}")
     raise
@@ -935,7 +936,6 @@ if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=False,  # Disable debug mode in production
-        threaded=True,  # Enable threading
-        use_reloader=False  # Disable reloader in production
+        debug=False,
+        threaded=True
     )
