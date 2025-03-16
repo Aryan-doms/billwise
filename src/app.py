@@ -57,7 +57,6 @@ if not DATABASE_URL:
     logger.error("DATABASE_URL environment variable is missing.")
     raise ValueError("DATABASE_URL environment variable is required")
 
-# Replace existing database pool initialization with this
 db_pool = None
 
 def init_db_pool():
@@ -78,26 +77,13 @@ def init_db_pool():
             logger.error(f"Database connection error: {e}")
             raise
 
-@app.before_first_request
-def initialize():
+with app.app_context():
     init_db_pool()
 
 @app.before_request
-def init_db_connection():
-    if not hasattr(g, 'db_pool'):
-        try:
-            g.db_pool = SimpleConnectionPool(
-                minconn=1,
-                maxconn=5,
-                dsn=DATABASE_URL,
-                keepalives=1,
-                keepalives_idle=30,
-                keepalives_interval=10,
-                keepalives_count=5
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize connection pool: {e}")
-            raise
+def before_request():
+    if not hasattr(g, 'db'):
+        g.db = get_db()
 
 @app.teardown_appcontext
 def close_db_connection_pool(exception):
@@ -941,8 +927,21 @@ def monthly_summary():
     except Exception as e:
         logger.error(f"Error: {e}")
         return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/health')
+def health_check():
+    try:
+        db = get_db()
+        with db.cursor() as cursor:
+            cursor.execute('SELECT 1')
+        return jsonify({"status": "healthy"}), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return jsonify({"status": "unhealthy", "error": str(e)}), 500
         
 if __name__ == '__main__':
+    with app.app_context():
+        init_db_pool()
     port = int(os.getenv('PORT', 5000))
     app.run(
         host='0.0.0.0',
