@@ -65,6 +65,22 @@ if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
 
 # Update upload folder for Vercel
 UPLOAD_FOLDER = '/tmp' if os.getenv('VERCEL_ENV') else 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Add error handling for database connection
+try:
+    DATABASE_URL = os.getenv('DATABASE_URL')
+    if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    
+    db_pool = SimpleConnectionPool(
+        minconn=1,
+        maxconn=10,
+        dsn=DATABASE_URL
+    )
+except Exception as e:
+    print(f"Database connection error: {e}")
+    raise
 
 # Initialize database connection pool
 db_pool = SimpleConnectionPool(
