@@ -259,22 +259,22 @@
                 </div>
                 
         <!-- Aboutus Page -->
-        <div id="about" class="page container mx-auto px-4 py-16">
-            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+        <div id="about" class="page container mx-auto px-4 py-16 fade-in-up">
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8">
                 <h2 class="text-4xl font-semibold text-white mb-4">Who We Are</h2>
                 <p class="text-white leading-relaxed">
                     Welcome to our AI Bill Summarizing Tool, a project designed to revolutionize financial management. Our advanced AI technology, including OCR and NLP, transforms uploaded bills into insightful summaries, making it easier than ever to keep track of your spending.
                 </p>
             </section>
     
-            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8">
                 <h2 class="text-4xl font-semibold text-white mb-4">Our Mission</h2>
                 <p class="text-white leading-relaxed">
                     We aim to simplify the financial management process for individuals by providing a user-friendly platform that processes bills, categorizes expenses, and offers actionable insights to help maintain budgets.
                 </p>
             </section>
     
-            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8">
                 <h2 class="text-4xl font-semibold text-white mb-4">Key Features</h2>
                 <ul class="list-disc list-inside text-white leading-relaxed">
                     <li class="mb-2">AI-driven extraction and summarization of bill data.</li>
@@ -284,7 +284,7 @@
                 </ul>
             </section>
     
-            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8 fade-in-up">
+            <section class="bg-white bg-opacity-20 rounded-lg shadow-lg p-8 mb-8">
                 <h2 class="text-4xl font-semibold text-white mb-4">The Developer</h2>
                 <p class="text-white leading-relaxed">
                     Hi! I'm Aryan, a Computer Science student passionate about AI and software development. This project is an exciting opportunity to explore AI's real-world applications.
@@ -305,40 +305,35 @@
     
 
     <script>
-        // Page Navigation Function
         function showPage(pageId) {
+            // Add debug logging
             console.log("Showing page:", pageId);
             
+            // Get all pages
+            const pages = document.querySelectorAll('.page');
+            console.log("Found pages:", pages.length);
+            
             // Hide all pages
-            document.querySelectorAll('.page').forEach(page => {
+            pages.forEach(page => {
                 page.classList.remove('active');
                 page.style.display = 'none';
+                console.log("Hiding page:", page.id);
             });
         
             // Show selected page
             const selectedPage = document.getElementById(pageId);
+            console.log("Selected page:", selectedPage);
             
             if (selectedPage) {
                 selectedPage.classList.add('active');
                 selectedPage.style.display = 'block';
-                
-                // Scroll to top
                 window.scrollTo(0, 0);
             } else {
                 console.error("Page not found:", pageId);
             }
         }
 
-        // Optional: File Upload Handler (placeholder)
-        function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (file) {
-                alert('File selected: ' + file.name);
-                // Add your file upload logic here
-            }
-        }
-
-        // Ensure home page is active on load
+        // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
             showPage('home');
         });
