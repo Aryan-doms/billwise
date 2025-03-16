@@ -17,6 +17,8 @@ import google.generativeai as genai
 from PIL import Image  # noqa: F401  (keep it for potential future image optimizations)
 from PyPDF2 import PdfReader, PdfWriter  # noqa: F401  (keep it for potential future PDF optimizations)
 import logging
+from functools import wraps
+import timeout_decorator
 
 # Initialize Flask app
 app = Flask(__name__,
@@ -42,10 +44,11 @@ if not GEMINI_API_KEY:
 genai.configure(api_key=GEMINI_API_KEY)
 
 
-# Upload folder configuration
-UPLOAD_FOLDER = '/tmp'  # Vercel-compatible (or use 'uploads' for local)
+# Upload folder configuration for Railway
+UPLOAD_FOLDER = '/tmp'  # Railway uses ephemeral filesystem
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB limit for Railway
 
 # Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -53,16 +56,43 @@ if not DATABASE_URL:
     logger.error("DATABASE_URL environment variable is missing.")
     raise ValueError("DATABASE_URL environment variable is required")
 
-if DATABASE_URL.startswith('postgres://'):
-    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-
+# Initialize database connection pool with optimized settings for Railway
 try:
-    db_pool = SimpleConnectionPool(minconn=1, maxconn=10, dsn=DATABASE_URL)
+    db_pool = SimpleConnectionPool(
+        minconn=1,
+        maxconn=5,  # Reduced for Railway's container environment
+        dsn=DATABASE_URL,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5
+    )
     logger.info("Database connection pool initialized.")
 except Exception as e:
     logger.error(f"Database connection error: {e}")
     raise
 
+# Add after database configuration
+@app.before_first_request
+def init_connection_pool():
+    global db_pool
+    try:
+        if not db_pool:
+            db_pool = SimpleConnectionPool(
+                minconn=1,
+                maxconn=5,
+                dsn=DATABASE_URL
+            )
+    except Exception as e:
+        logger.error(f"Failed to initialize connection pool: {e}")
+        raise
+
+@app.teardown_appcontext
+def close_db_connection_pool(exception):
+    global db_pool
+    if db_pool:
+        db_pool.closeall()
+        logger.info("Closed all database connections")
 
 # Application Context Management
 def get_db():
@@ -99,7 +129,6 @@ def init_db():
 
 # File Handling Constants
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png'}
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
 # File Validation Functions
@@ -492,7 +521,18 @@ def dashboard():
         flash('Error loading dashboard data', 'error')
         return redirect(url_for('login'))
 
+def handle_timeout(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return timeout_decorator.timeout(30)(func)(*args, **kwargs)
+        except timeout_decorator.TimeoutError:
+            logger.error(f"Function {func.__name__} timed out")
+            return jsonify({'error': 'Request timed out'}), 504
+    return wrapper
+
 @app.route('/upload_bill', methods=['POST'])
+@handle_timeout
 def upload_bill():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
@@ -891,4 +931,11 @@ def monthly_summary():
         return jsonify({"error": "Internal server error"}), 500
         
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=False, timeout=30)
+    port = int(os.getenv('PORT', 5000))
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=False,  # Disable debug mode in production
+        threaded=True,  # Enable threading
+        use_reloader=False  # Disable reloader in production
+    )
