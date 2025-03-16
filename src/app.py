@@ -30,7 +30,7 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 genai.configure(api_key=GEMINI_API_KEY)
 
 #  upload folder path
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+UPLOAD_FOLDER = "/tmp/uploads"
 
 # clean uplaod fodler
 if os.path.exists(UPLOAD_FOLDER):
