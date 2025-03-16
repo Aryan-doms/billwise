@@ -60,8 +60,6 @@ BillWise/
 2. **Access the Web App:**
    Open `http://127.0.0.1:5000` in your browser.
 
-3. Follow the setup prompts and deploy the project.
-
 ## Contributing
 
 Contributions are welcome! Feel free to open an issue or submit a pull request.
