@@ -3,67 +3,54 @@ import uuid
 import base64
 import json
 import shutil
-import tempfile  # Import tempfile
+import tempfile
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 import psycopg2
-from psycopg2.pool import SimpleConnectionPool
+from psycopg2.pool import ThreadedConnectionPool  # Use ThreadedConnectionPool
 from psycopg2.extras import DictCursor
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session, g, send_from_directory
 import google.generativeai as genai
-from PIL import Image  # noqa: F401  (keep it for potential future image optimizations)
-from PyPDF2 import PdfReader, PdfWriter  # noqa: F401  (keep it for potential future PDF optimizations)
 import logging
 from functools import wraps
 import timeout_decorator
 
-# Initialize Flask app with Railway-optimized settings
-app = Flask(__name__,
-            static_folder='website/static',
-            template_folder='website/templates')
-
-# Use environment variable for secret key
+# --- Configuration & Initialization ---
+app = Flask(__name__, static_folder='website/static', template_folder='website/templates')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
 
-# Configure Logging
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging (keep as is)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Load environment variables EARLY
-load_dotenv()
-
-
-# Configure API keys
+load_dotenv()  # Load env vars early
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
-    logger.error("GEMINI_API_KEY environment variable is missing.")
-    raise ValueError("GEMINI_API_KEY environment variable is required")
+    logger.error("GEMINI_API_KEY missing.")
+    raise ValueError("GEMINI_API_KEY required")
 genai.configure(api_key=GEMINI_API_KEY)
 
-
-# Upload folder configuration for Railway
-UPLOAD_FOLDER = '/tmp'  # Railway uses ephemeral filesystem
+# Railway-Optimized Configuration
+UPLOAD_FOLDER = '/tmp'  # Ephemeral storage
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB limit for Railway
-
-# Database Configuration
+MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
 DATABASE_URL = os.getenv('DATABASE_URL')
 if not DATABASE_URL:
-    logger.error("DATABASE_URL environment variable is missing.")
-    raise ValueError("DATABASE_URL environment variable is required")
+    logger.error("DATABASE_URL missing.")
+    raise ValueError("DATABASE_URL required")
 
+# --- Database Connection Pool ---
 db_pool = None
 
 def init_db_pool():
     global db_pool
     if db_pool is None:
         try:
-            db_pool = SimpleConnectionPool(
+            db_pool = ThreadedConnectionPool(  # Use ThreadedConnectionPool
                 minconn=1,
                 maxconn=5,
                 dsn=DATABASE_URL,
@@ -77,8 +64,17 @@ def init_db_pool():
             logger.error(f"Database connection error: {e}")
             raise
 
+    # Test connection
+    with db_pool.getconn() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1")  # Simple query to test connectivity
+            cursor.fetchone()  # Fetch the result to ensure query execution
+    logger.info("Database connection tested successfully")
+
+
 with app.app_context():
     init_db_pool()
+
 
 @app.before_request
 def before_request():
@@ -86,13 +82,16 @@ def before_request():
         g.db = get_db()
 
 @app.teardown_appcontext
-def close_db_connection_pool(exception):
-    global db_pool
-    if db_pool:
-        db_pool.closeall()
-        logger.info("Closed all database connections")
+def close_db(error):
+    db = getattr(g, 'db', None)
+    if db is not None:
+        try:
+            if error:
+                db.rollback()
+        finally:
+            db_pool.putconn(db)
+            logger.debug("Database connection returned to pool.")
 
-# Application Context Management
 def get_db():
     if 'db' not in g:
         try:
@@ -101,16 +100,8 @@ def get_db():
             logger.debug("New database connection acquired from pool.")
         except Exception as e:
             logger.error(f"Failed to get a database connection: {e}")
-            raise  # Re-raise to handle upstream
+            raise
     return g.db
-
-
-@app.teardown_appcontext
-def close_db(error):
-    db = getattr(g, 'db', None)
-    if db is not None:
-        db_pool.putconn(db)
-        logger.debug("Database connection returned to pool.")
 
 def init_db():
     with app.app_context():
@@ -125,14 +116,11 @@ def init_db():
             db.rollback()
             print(f"Error initializing database: {e}")
 
-# File Handling Constants
+# --- File Handling ---
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png'}
 
-
-# File Validation Functions
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
 
 def validate_file(file):
     if not file:
@@ -140,98 +128,48 @@ def validate_file(file):
     if not allowed_file(file.filename):
         return False, "File type not allowed"
 
-    # Check file size WITHOUT reading the whole file into memory
-    file.seek(0, os.SEEK_END)  # Go to the end of the file
+    file.seek(0, os.SEEK_END)
     size = file.tell()
-    file.seek(0)  # Go back to the beginning
+    file.seek(0)
 
     if size > MAX_FILE_SIZE:
-        return False, f"File too large. Maximum size is {MAX_FILE_SIZE / 1024 / 1024}MB"
+        return False, f"File too large. Max size: {MAX_FILE_SIZE / 1024 / 1024}MB"
 
     return True, "File is valid"
 
-
+# --- Bill Processing ---
 class BillProcessor:
     def __init__(self):
         self.model = genai.GenerativeModel('gemini-1.5-flash')
-        self.CHUNK_SIZE = 5  # Unused. Remove if not needed.
 
     def print_processing_summary(self, file_path, file_type, text_length):
-        logger.info("\n" + "=" * 50)
-        logger.info(f"PROCESSING SUMMARY FOR: {os.path.basename(file_path)}")
-        logger.info("=" * 50)
-        logger.info(f"File Type: {file_type}")
-        logger.info(f"Extracted Text Length: {text_length} characters")
-        logger.info("-" * 50)
-
-    def print_extracted_text_sample(self, text):
-        logger.info("\nEXTRACTED TEXT SAMPLE:")
-        logger.info("-" * 50)
-        if len(text) > 400:
-            logger.info("First 200 characters:\n" + text[:200] + "...")
-            logger.info("\nLast 200 characters:\n" + "..." + text[-200:])
-        else:
-            logger.info(text)
-        logger.info("-" * 50)
-
-    def print_results(self, results):
-        logger.info("\nANALYSIS RESULTS:")
-        logger.info("=" * 50)
-        for i, bill in enumerate(results, 1):
-            logger.info(f"\nBill #{i}:")
-            logger.info("-" * 25)
-            logger.info(f"Date: {bill['invoice_date']}")
-            logger.info(f"Category: {bill['category']}")
-            logger.info(f"Amount: {bill['total_amount']}")
-            logger.info(f"Confidence: {bill['confidence']}")
-        logger.info("=" * 50 + "\n")
+        logger.info(f"Processing {os.path.basename(file_path)}, Type: {file_type}, Text Length: {text_length}")
 
     def process_pdf(self, pdf_path):
-        """Process a PDF file"""
         try:
             reader = PdfReader(pdf_path)
             text_content = ""
-
             for page in reader.pages:
                 text_content += page.extract_text() + "\n"
-
             return text_content.strip()
-
         except Exception as e:
-            logger.error(f"Error processing PDF: {e}")
+            logger.error(f"PDF processing error: {e}")
             return None
 
     def process_image(self, image_file):
-        """Process image directly with Gemini"""
         try:
-            image_parts = [{
-                "mime_type": image_file.content_type,
-                "data": image_file.read()
-            }]
-            prompt = """Extract text from the following image
-            Instructions:
-            1. Extract the text from the image.
-            2. Return the extracted text as a plain string."""
-
+            image_parts = [{"mime_type": image_file.content_type, "data": image_file.read()}]
+            prompt = "Extract text from this image and return the text as a plain string."
             response = self.model.generate_content([prompt, *image_parts])
-
-            if response.text:
-                return response.text
-            return None
-
+            return response.text if response.text else None
         except Exception as e:
-            logger.error(f"Error processing image with Gemini: {e}")
+            logger.error(f"Gemini image processing error: {e}")
             return None
 
     def process_text_with_gemini(self, extracted_text):
-        """Process the extracted text with Gemini."""
         if not extracted_text.strip():
-            logger.warning("No text provided for Gemini processing")
+            logger.warning("No text for Gemini processing")
             return []
-
-        logger.info("\nPROCESSING WITH GEMINI")
-        logger.info("=" * 50)
-        logger.info(f"Text length: {len(extracted_text)} characters")
 
         prompt = f"""
             Analyze the following bill text. It may come from an image or PDF, and there may be multiple bills. Treat each bill separately.
@@ -266,41 +204,45 @@ class BillProcessor:
             }}
         """
 
-        logger.info("\nSending to Gemini...")
         try:
             response = self.model.generate_content([prompt])
             response_text = response.text.strip()
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+            result = json.loads(response_text)
+
+            upload_date = datetime.now().strftime("%Y-%m-%d")
+            for item in result:
+                if item.get("invoice_date") in [None, "", "null"]:
+                    item["invoice_date"] = upload_date
+
+            return result
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON from Gemini: {response_text}, Error: {e}")
+            return []
         except Exception as e:
             logger.error(f"Gemini API error: {e}")
-            return [] # Handle Gemini failure more gracefully
-
-        logger.info("\nParsing Gemini response...")
-        response_text = response_text.replace('```json', '').replace('```', '').strip()
-
-        try:
-            result = json.loads(response_text)
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON response from Gemini: {response_text}")
             return []
 
-        upload_date = datetime.now().strftime("%Y-%m-%d")
-        for item in result:
-            if item.get("invoice_date") in [None, "", "null"]:
-                item["invoice_date"] = upload_date
 
-        self.print_results(result)
-        return result
+# --- Route Decorators ---
+def handle_timeout(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return timeout_decorator.timeout(30)(func)(*args, **kwargs)
+        except timeout_decorator.TimeoutError:
+            logger.error(f"Function {func.__name__} timed out")
+            return jsonify({'error': 'Request timed out'}), 504
+    return wrapper
 
-
+# --- Routes ---
 @app.route('/')
 def index():
     return render_template('index.html')
 
-
 @app.route('/about')
 def about():
     return render_template('about.html')
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -327,7 +269,6 @@ def login():
             return redirect(url_for('login'))
 
     return render_template('login.html')
-
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -364,7 +305,6 @@ def register():
             flash('Registration failed', 'error')
             logger.error(f"Registration error: {e}")
             return redirect(url_for('register'))
-
 
 @app.route('/dashboard')
 def dashboard():
@@ -519,16 +459,6 @@ def dashboard():
         flash('Error loading dashboard data', 'error')
         return redirect(url_for('login'))
 
-def handle_timeout(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return timeout_decorator.timeout(30)(func)(*args, **kwargs)
-        except timeout_decorator.TimeoutError:
-            logger.error(f"Function {func.__name__} timed out")
-            return jsonify({'error': 'Request timed out'}), 504
-    return wrapper
-
 @app.route('/upload_bill', methods=['POST'])
 @handle_timeout
 def upload_bill():
@@ -544,7 +474,6 @@ def upload_bill():
         flash('No selected file', 'danger')
         return redirect(url_for('dashboard'))
 
-    # Validate file
     is_valid, message = validate_file(file)
     if not is_valid:
         flash(message, 'danger')
@@ -553,20 +482,14 @@ def upload_bill():
     try:
         bill_processor = BillProcessor()
 
-        # Use a temporary file to store the uploaded bill
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp_file:
             file.save(tmp_file.name)
             temp_file_path = tmp_file.name
-    except Exception as e:
-        logger.error(f"Error creating temporary file: {e}")
-        flash('Error processing file', 'danger')
-        return redirect(url_for('dashboard'))
 
         try:
             if file.filename.lower().endswith('.pdf'):
                 extracted_text = bill_processor.process_pdf(temp_file_path)
             else:
-                # Reopen the temporary file for reading
                 with open(temp_file_path, 'rb') as img_file:
                     extracted_text = bill_processor.process_image(img_file)
 
@@ -574,24 +497,21 @@ def upload_bill():
                 flash('Could not extract text from file', 'danger')
                 return redirect(url_for('dashboard'))
 
-            # Process extracted text
             results = bill_processor.process_text_with_gemini(extracted_text)
 
             if not results:
                 flash('No bill information could be extracted', 'danger')
                 return redirect(url_for('dashboard'))
 
-            # Store results in database
             db = get_db()
             with db.cursor() as cursor:
+                # Use a prepared statement for inserting bills
+                cursor.execute("PREPARE insert_bill AS INSERT INTO Bill (user_id, total_amount, category, invoice_date, confidence_level) VALUES (%s, %s, %s, %s, %s) RETURNING bill_id")
+
                 for bill in results:
                     if bill.get('total_amount') and bill.get('category'):
-                        cursor.execute("""
-                            INSERT INTO Bill
-                            (user_id, total_amount, category, invoice_date, confidence_level)
-                            VALUES (%s, %s, %s, %s, %s)
-                            RETURNING bill_id
-                        """, (
+                        # Execute the prepared statement with bill details
+                        cursor.execute("EXECUTE insert_bill (%s, %s, %s, %s, %s)", (
                             session['user_id'],
                             float(bill['total_amount']),
                             bill['category'],
@@ -599,6 +519,9 @@ def upload_bill():
                             bill['confidence']
                         ))
                 db.commit()
+
+                # Deallocate the prepared statement after use
+                cursor.execute("DEALLOCATE insert_bill")
                 flash('Bill processed and stored successfully!', 'success')
 
         except Exception as e:
@@ -607,11 +530,14 @@ def upload_bill():
             flash(f'Error processing file: {str(e)}', 'danger')
 
         finally:
-            # Clean up temporary file
             try:
                 os.remove(temp_file_path)
             except OSError as e:
                 logger.warning(f"Error removing temporary file: {e}")
+
+    except Exception as e:
+        logger.error(f"General error in upload_bill: {e}")
+        flash(f"Error during file upload: {str(e)}", "danger")
 
     return redirect(url_for('dashboard'))
 
@@ -625,7 +551,9 @@ def get_expense_breakdown():
     try:
         db = get_db()
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            # Prepare the SQL query for expense breakdown
             cursor.execute("""
+                PREPARE get_expense_breakdown AS
                 WITH monthly_totals AS (
                     SELECT SUM(total_amount) as month_total
                     FROM Bill
@@ -639,10 +567,17 @@ def get_expense_breakdown():
                 FROM Bill
                 WHERE user_id = %s
                 AND date_trunc('month', invoice_date)::date = to_date(%s, 'YYYY-MM')
-                GROUP BY category
-            """, (session['user_id'], selected_month, session['user_id'], selected_month))
+                GROUP BY category;
+            """)
+
+            # Execute the prepared statement
+            cursor.execute("EXECUTE get_expense_breakdown (%s, %s, %s, %s)",
+                           (session['user_id'], selected_month, session['user_id'], selected_month))
 
             expenses = cursor.fetchall()
+
+            # Deallocate the prepared statement
+            cursor.execute("DEALLOCATE get_expense_breakdown")
 
             if not expenses:
                 return jsonify({
@@ -680,15 +615,23 @@ def get_recent_bills():
     try:
         db = get_db()
         with db.cursor() as cursor:
+            # Prepare the SQL query
             cursor.execute("""
+                PREPARE get_recent_bills AS
                 SELECT invoice_date::date, category, total_amount
                 FROM Bill
                 WHERE user_id = %s
                 AND to_char(invoice_date, 'YYYY-MM') = %s
-                ORDER BY invoice_date DESC
-            """, (session['user_id'], selected_month))
+                ORDER BY invoice_date DESC;
+            """)
+
+            # Execute the prepared statement with the provided parameters
+            cursor.execute("EXECUTE get_recent_bills (%s, %s)", (session['user_id'], selected_month))
 
             bills = cursor.fetchall()
+
+            # Deallocate the prepared statement
+            cursor.execute("DEALLOCATE get_recent_bills")
 
             bill_list = [{
                 'date': bill['invoice_date'].strftime('%Y-%m-%d'),
@@ -701,7 +644,6 @@ def get_recent_bills():
     except Exception as e:
         logger.error(f"Error fetching recent bills: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/set_budget', methods=['POST'])
 def set_budget():
@@ -735,7 +677,6 @@ def set_budget():
         flash('Error setting budget', 'error')
         return redirect(url_for('dashboard'))
 
-
 @app.route('/get_monthly_expense_total', methods=['GET'])
 def get_monthly_expense_total():
     if 'user_id' not in session:
@@ -760,7 +701,6 @@ def get_monthly_expense_total():
     except Exception as e:
         logger.error(f"Error in get_monthly_expense_total: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/get_monthly_budget', methods=['GET'])
 def get_monthly_budget():
@@ -788,7 +728,6 @@ def get_monthly_budget():
     except Exception as e:
         logger.error(f"Error in get_monthly_budget: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/get_budget_for_selectmonth', methods=['GET'])
 def get_budget_for_selectmonth():
@@ -820,38 +759,31 @@ def get_budget_for_selectmonth():
         logger.error(f"Error fetching monthly budget: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
-
 @app.route('/update_profile', methods=['POST'])
 def update_profile():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
     try:
-        # Get form data
         name = request.form.get('name')
         profile_picture = request.files.get('profile_picture')
 
-        # Get database connection from pool
         db = get_db()
 
         with db.cursor() as cursor:
-            # Initialize query parts and parameters
             query_parts = []
             params = []
 
-            # Add name update if provided
             if name and name.strip():
                 query_parts.append("username = %s")
                 params.append(name.strip())
 
-            # Handle pfp updat
             if profile_picture and profile_picture.filename:
                 if not allowed_file(profile_picture.filename):
                     flash('Please upload a valid image file (JPG, PNG, or JPEG).', 'error')
                     return redirect(url_for('dashboard'))
 
                 try:
-                    # Read and process image data
                     image_data = profile_picture.read()
                     query_parts.append("profile_picture = %s")
                     params.append(image_data)
@@ -860,7 +792,6 @@ def update_profile():
                     flash('Error processing image file.', 'error')
                     return redirect(url_for('dashboard'))
 
-            # Only proceed if user input something to update
             if query_parts:
                 query = "UPDATE Users SET " + ", ".join(query_parts)
                 query += " WHERE user_id = %s"
@@ -869,7 +800,6 @@ def update_profile():
                 cursor.execute(query, tuple(params))
                 db.commit()
 
-                # Update session data if user change name
                 if name and name.strip():
                     session['username'] = name.strip()
 
@@ -884,15 +814,12 @@ def update_profile():
 
     return redirect(url_for('dashboard'))
 
-
 @app.route('/logout', methods=['POST'])
 def logout():
-    # Clear the session data
     session.pop('user_id', None)
     session.pop('username', None)
 
     return redirect(url_for('login'))
-
 
 @app.route('/monthly-summary', methods=['POST'])
 def monthly_summary():
@@ -938,7 +865,7 @@ def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
-        
+
 if __name__ == '__main__':
     with app.app_context():
         init_db_pool()
