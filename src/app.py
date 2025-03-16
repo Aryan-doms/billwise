@@ -1,105 +1,88 @@
 import os
 import uuid
-from werkzeug.utils import secure_filename
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session, g, send_from_directory
-from PIL import Image
-from PyPDF2 import PdfReader, PdfWriter
-from werkzeug.security import generate_password_hash, check_password_hash
-import google.generativeai as genai
-import json
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta  # Add this for month calculations
 import base64
+import json
+import shutil
+import tempfile  # Import tempfile
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
 import psycopg2
 from psycopg2.pool import SimpleConnectionPool
 from psycopg2.extras import DictCursor
-import shutil
+from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session, g, send_from_directory
+import google.generativeai as genai
+from PIL import Image  # noqa: F401  (keep it for potential future image optimizations)
+from PyPDF2 import PdfReader, PdfWriter  # noqa: F401  (keep it for potential future PDF optimizations)
+import logging
 
-app = Flask(__name__, 
-            static_folder='website/static', 
+# Initialize Flask app
+app = Flask(__name__,
+            static_folder='website/static',
             template_folder='website/templates')
 
 app.secret_key = os.urandom(24)
 
-# Load env variables first
+# Configure Logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Load environment variables EARLY
 load_dotenv()
 
-# Then configure API keys
+
+# Configure API keys
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+if not GEMINI_API_KEY:
+    logger.error("GEMINI_API_KEY environment variable is missing.")
+    raise ValueError("GEMINI_API_KEY environment variable is required")
 genai.configure(api_key=GEMINI_API_KEY)
 
-#  upload folder path
-UPLOAD_FOLDER = "/tmp/uploads"
 
-# clean uplaod fodler
-if os.path.exists(UPLOAD_FOLDER):
-    try:
-        if os.path.isfile(UPLOAD_FOLDER):
-            os.remove(UPLOAD_FOLDER)
-        else:
-            shutil.rmtree(UPLOAD_FOLDER)
-    except Exception as e:
-        print(f"Error cleaning up uploads folder: {e}")
-        raise
-
-# Create  uploads folder
-try:
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-except Exception as e:
-    print(f"Error creating uploads directory: {e}")
-    raise
-
+# Upload folder configuration
+UPLOAD_FOLDER = '/tmp'  # Vercel-compatible (or use 'uploads' for local)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# error handling for missing env variables
-if not os.getenv('DATABASE_URL'):
-    raise ValueError("DATABASE_URL environment variable is required")
-if not os.getenv('GEMINI_API_KEY'):
-    raise ValueError("GEMINI_API_KEY environment variable is required")
-
-# Update the database connection
+# Database Configuration
 DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+if not DATABASE_URL:
+    logger.error("DATABASE_URL environment variable is missing.")
+    raise ValueError("DATABASE_URL environment variable is required")
+
+if DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-# Update upload folder for Vercel
-UPLOAD_FOLDER = '/tmp' if os.getenv('VERCEL_ENV') else 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Add error handling for database connection
 try:
-    DATABASE_URL = os.getenv('DATABASE_URL')
-    if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
-        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-    
-    db_pool = SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        dsn=DATABASE_URL
-    )
+    db_pool = SimpleConnectionPool(minconn=1, maxconn=10, dsn=DATABASE_URL)
+    logger.info("Database connection pool initialized.")
 except Exception as e:
-    print(f"Database connection error: {e}")
+    logger.error(f"Database connection error: {e}")
     raise
 
-# Initialize database connection pool
-db_pool = SimpleConnectionPool(
-    minconn=1,
-    maxconn=10,
-    dsn=DATABASE_URL
-)
 
+# Application Context Management
 def get_db():
     if 'db' not in g:
-        g.db = db_pool.getconn()
-        g.db.cursor_factory = DictCursor
+        try:
+            g.db = db_pool.getconn()
+            g.db.cursor_factory = DictCursor
+            logger.debug("New database connection acquired from pool.")
+        except Exception as e:
+            logger.error(f"Failed to get a database connection: {e}")
+            raise  # Re-raise to handle upstream
     return g.db
+
 
 @app.teardown_appcontext
 def close_db(error):
     db = getattr(g, 'db', None)
     if db is not None:
         db_pool.putconn(db)
+        logger.debug("Database connection returned to pool.")
 
 def init_db():
     with app.app_context():
@@ -114,133 +97,115 @@ def init_db():
             db.rollback()
             print(f"Error initializing database: {e}")
 
-# File handling condtion
+# File Handling Constants
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
+
+# File Validation Functions
 def allowed_file(filename):
-    """Check if file type is allowed and size is within limits"""
-    if '.' not in filename:
-        return False
-    
-    ext = filename.rsplit('.', 1)[1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return False
-        
-    return True
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def validate_file(file):
-    """Validate both file type and size"""
     if not file:
         return False, "No file provided"
-        
     if not allowed_file(file.filename):
         return False, "File type not allowed"
-        
-    # Check file size
-    file.seek(0, 2) 
-    size = file.tell() 
-    file.seek(0) 
-    
+
+    # Check file size WITHOUT reading the whole file into memory
+    file.seek(0, os.SEEK_END)  # Go to the end of the file
+    size = file.tell()
+    file.seek(0)  # Go back to the beginning
+
     if size > MAX_FILE_SIZE:
-        return False, f"File too large. Maximum size is {MAX_FILE_SIZE/1024/1024}MB"
-        
+        return False, f"File too large. Maximum size is {MAX_FILE_SIZE / 1024 / 1024}MB"
+
     return True, "File is valid"
 
-# main class
+
 class BillProcessor:
     def __init__(self):
         self.model = genai.GenerativeModel('gemini-1.5-flash')
-        self.CHUNK_SIZE = 5 
+        self.CHUNK_SIZE = 5  # Unused. Remove if not needed.
 
     def print_processing_summary(self, file_path, file_type, text_length):
-        """Print a summary of the processed file."""
-        print("\n" + "="*50)
-        print(f"PROCESSING SUMMARY FOR: {os.path.basename(file_path)}")
-        print("="*50)
-        print(f"File Type: {file_type}")
-        print(f"Extracted Text Length: {text_length} characters")
-        print("-"*50)
+        logger.info("\n" + "=" * 50)
+        logger.info(f"PROCESSING SUMMARY FOR: {os.path.basename(file_path)}")
+        logger.info("=" * 50)
+        logger.info(f"File Type: {file_type}")
+        logger.info(f"Extracted Text Length: {text_length} characters")
+        logger.info("-" * 50)
 
     def print_extracted_text_sample(self, text):
-        """Print a sample of the extracted text."""
-        print("\nEXTRACTED TEXT SAMPLE:")
-        print("-"*50)
+        logger.info("\nEXTRACTED TEXT SAMPLE:")
+        logger.info("-" * 50)
         if len(text) > 400:
-            print("First 200 characters:")
-            print(text[:200] + "...")
-            print("\nLast 200 characters:")
-            print("..." + text[-200:])
+            logger.info("First 200 characters:\n" + text[:200] + "...")
+            logger.info("\nLast 200 characters:\n" + "..." + text[-200:])
         else:
-            print(text)
-        print("-"*50)
+            logger.info(text)
+        logger.info("-" * 50)
 
     def print_results(self, results):
-        """Print the analyzed results in a formatted way."""
-        print("\nANALYSIS RESULTS:")
-        print("="*50)
+        logger.info("\nANALYSIS RESULTS:")
+        logger.info("=" * 50)
         for i, bill in enumerate(results, 1):
-            print(f"\nBill #{i}:")
-            print("-"*25)
-            print(f"Date: {bill['invoice_date']}")
-            print(f"Category: {bill['category']}")
-            print(f"Amount: {bill['total_amount']}")
-            print(f"Confidence: {bill['confidence']}")
-        print("="*50 + "\n")
+            logger.info(f"\nBill #{i}:")
+            logger.info("-" * 25)
+            logger.info(f"Date: {bill['invoice_date']}")
+            logger.info(f"Category: {bill['category']}")
+            logger.info(f"Amount: {bill['total_amount']}")
+            logger.info(f"Confidence: {bill['confidence']}")
+        logger.info("=" * 50 + "\n")
 
     def process_pdf(self, pdf_path):
         """Process a PDF file"""
         try:
             reader = PdfReader(pdf_path)
             text_content = ""
-            
+
             for page in reader.pages:
                 text_content += page.extract_text() + "\n"
-                
+
             return text_content.strip()
-            
+
         except Exception as e:
-            print(f"Error processing PDF: {e}")
+            logger.error(f"Error processing PDF: {e}")
             return None
 
     def process_image(self, image_file):
         """Process image directly with Gemini"""
         try:
-            # Read image file
             image_parts = [{
                 "mime_type": image_file.content_type,
                 "data": image_file.read()
             }]
-            
-            # prompt for Gemini
             prompt = """Extract text from the following image
             Instructions:
             1. Extract the text from the image.
             2. Return the extracted text as a plain string."""
-            
-            # Generate content with image and prompt
+
             response = self.model.generate_content([prompt, *image_parts])
-            
-            # Get the response text
+
             if response.text:
                 return response.text
             return None
 
         except Exception as e:
-            print(f"Error processing image with Gemini: {e}")
+            logger.error(f"Error processing image with Gemini: {e}")
             return None
 
     def process_text_with_gemini(self, extracted_text):
         """Process the extracted text with Gemini."""
         if not extracted_text.strip():
-            print("Error: No text provided for Gemini processing")
+            logger.warning("No text provided for Gemini processing")
             return []
 
-        print("\nPROCESSING WITH GEMINI")
-        print("=" * 50)
-        print(f"Text length: {len(extracted_text)} characters")
+        logger.info("\nPROCESSING WITH GEMINI")
+        logger.info("=" * 50)
+        logger.info(f"Text length: {len(extracted_text)} characters")
 
-        # Gemini prompt
         prompt = f"""
             Analyze the following bill text. It may come from an image or PDF, and there may be multiple bills. Treat each bill separately.
 
@@ -274,50 +239,54 @@ class BillProcessor:
             }}
         """
 
-        print("\nSending to Gemini...")
-        response = self.model.generate_content([prompt])
-        response_text = response.text.strip()
+        logger.info("\nSending to Gemini...")
+        try:
+            response = self.model.generate_content([prompt])
+            response_text = response.text.strip()
+        except Exception as e:
+            logger.error(f"Gemini API error: {e}")
+            return [] # Handle Gemini failure more gracefully
 
-        print("\nParsing Gemini response...")
+        logger.info("\nParsing Gemini response...")
         response_text = response_text.replace('```json', '').replace('```', '').strip()
 
         try:
             result = json.loads(response_text)
         except json.JSONDecodeError:
-            print("Error: Invalid JSON response from Gemini")
+            logger.error(f"Invalid JSON response from Gemini: {response_text}")
             return []
 
-        # Assign the bill upload date if invoice_date is null or missing
         upload_date = datetime.now().strftime("%Y-%m-%d")
         for item in result:
             if item.get("invoice_date") in [None, "", "null"]:
                 item["invoice_date"] = upload_date
 
-        # Print results directly from Gemini's output
         self.print_results(result)
         return result
 
-    
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+
 @app.route('/about')
 def about():
     return render_template('about.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
-        
-        db = get_db()
+
         try:
+            db = get_db()
             with db.cursor() as cursor:
                 cursor.execute("SELECT * FROM Users WHERE email = %s", (email,))
                 user = cursor.fetchone()
-                
+
                 if user and check_password_hash(user['password'], password):
                     session['user_id'] = user['user_id']
                     session['username'] = user['username']
@@ -327,49 +296,48 @@ def login():
                     return redirect(url_for('login'))
         except Exception as e:
             flash('Login failed', 'error')
-            print(f"Login error: {e}")
+            logger.error(f"Login error: {e}")
             return redirect(url_for('login'))
 
-    # GET request - show login form
     return render_template('login.html')
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'GET':
         return render_template('register.html')
-        
+
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
         username = request.form['username']
 
-        db = get_db()
         try:
+            db = get_db()
             with db.cursor() as cursor:
-                # Check if email already exists
                 cursor.execute("SELECT * FROM Users WHERE email = %s", (email,))
                 if cursor.fetchone():
                     flash('Email already registered', 'error')
                     return redirect(url_for('login'))
 
-                # Insert new user
                 cursor.execute(
                     "INSERT INTO Users (email, password, username) VALUES (%s, %s, %s) RETURNING user_id",
                     (email, generate_password_hash(password), username)
                 )
                 user_id = cursor.fetchone()[0]
                 db.commit()
-                
+
                 session['user_id'] = user_id
                 session['username'] = username
                 flash('Registration successful!', 'success')
                 return redirect(url_for('login'))
-            
+
         except Exception as e:
             db.rollback()
             flash('Registration failed', 'error')
-            print(f"Registration error: {e}")
+            logger.error(f"Registration error: {e}")
             return redirect(url_for('register'))
+
 
 @app.route('/dashboard')
 def dashboard():
@@ -378,162 +346,151 @@ def dashboard():
 
     selected_month = request.args.get('month', datetime.now().strftime('%Y-%m'))
     current_year = datetime.now().year
-    db = get_db()
 
-    with db.cursor() as cursor:
-        # Fetch user details
-        cursor.execute("""
-            SELECT username, email, profile_picture 
-            FROM Users WHERE user_id = %s
-        """, (session['user_id'],))
-        user_data = cursor.fetchone()
-        if not user_data:
-            flash('User not found', 'error')
-            return redirect(url_for('login'))
+    try:
+        db = get_db()
+        with db.cursor() as cursor:
+            # Fetch user details
+            cursor.execute("""
+                SELECT username, email, profile_picture
+                FROM Users WHERE user_id = %s
+            """, (session['user_id'],))
+            user_data = cursor.fetchone()
+            if not user_data:
+                flash('User not found', 'error')
+                return redirect(url_for('login'))
 
-        # Initialize default values
-        yearly_expenses = 0
-        yearly_budget = 0
-        total_sum = 0
-        spent_amount = 0
+            # Initialize default values
+            yearly_expenses = 0
+            yearly_budget = 0
+            total_sum = 0
+            spent_amount = 0
 
-        # Fetch yearly expenses (with error handling)
-        try:
+            # Fetch yearly expenses
             cursor.execute("""
                 SELECT COALESCE(SUM(total_amount), 0) as yearly_expenses
-                FROM Bill 
-                WHERE user_id = %s 
+                FROM Bill
+                WHERE user_id = %s
                 AND EXTRACT(YEAR FROM invoice_date) = %s
             """, (session['user_id'], current_year))
             yearly_expenses = cursor.fetchone()[0] or 0
-        except Exception as e:
-            print(f"Error fetching yearly expenses: {e}")
 
-        # Fetch yearly budget (with error handling)
-        try:
+            # Fetch yearly budget
             cursor.execute("""
                 SELECT COALESCE(SUM(budget), 0) as yearly_budget
-                FROM MonthlyBudget 
-                WHERE user_id = %s 
+                FROM MonthlyBudget
+                WHERE user_id = %s
                 AND month LIKE %s
             """, (session['user_id'], f"{current_year}%"))
             yearly_budget = cursor.fetchone()[0] or 0
-        except Exception as e:
-            print(f"Error fetching yearly budget: {e}")
 
-        # Fetch monthly data (with error handling)
-        try:
-            # Get current month for budget
+            # Fetch monthly data
             current_month = datetime.now().strftime('%Y-%m')
-            
-            # Simplified query to get current month's budget only
             cursor.execute("""
                 SELECT budget
-                FROM MonthlyBudget 
-                WHERE user_id = %s 
+                FROM MonthlyBudget
+                WHERE user_id = %s
                 AND month = %s
             """, (session['user_id'], current_month))
-            
             budget_result = cursor.fetchone()
-# Ensure no None values are returned
             total_budget = float(budget_result[0]) if budget_result and budget_result[0] is not None else 0.0
 
-
-
-            # Keep selected_month for expenses
             cursor.execute("""
                 SELECT COALESCE(SUM(total_amount), 0) as total_sum
-                FROM Bill 
-                WHERE user_id = %s 
+                FROM Bill
+                WHERE user_id = %s
                 AND to_char(invoice_date, 'YYYY-MM') = %s
             """, (session['user_id'], selected_month))
-            
+
             expense_result = cursor.fetchone()
             total_sum = round(float(expense_result['total_sum']), 2)
-            spent_amount = total_sum  # Update spent amount to match actual expenses
-        except Exception as e:
-            print(f"Error fetching monthly data: {e}")
+            spent_amount = total_sum
 
-        # Calculate percentages and remaining amounts (safely)
-        budget_percentage = round((total_sum / total_budget * 100) if total_budget > 0 else 0, 2)
-        budget_remaining = round(max(total_budget - total_sum, 0),2)
-        yearly_remaining = max(yearly_budget - yearly_expenses, 0)
-        budget_yearpercentage = round((yearly_expenses / yearly_budget * 100) if yearly_budget > 0 else 0, 2)
+            # Calculate percentages and remaining amounts
+            budget_percentage = round((total_sum / total_budget * 100) if total_budget > 0 else 0, 2)
+            budget_remaining = round(max(total_budget - total_sum, 0), 2)
+            yearly_remaining = max(yearly_budget - yearly_expenses, 0)
+            budget_yearpercentage = round((yearly_expenses / yearly_budget * 100) if yearly_budget > 0 else 0, 2)
 
-        # Generate month options
-        current = datetime.now()
-        month_options = [
-            ((current - relativedelta(months=i)).strftime('%Y-%m'),
-             (current - relativedelta(months=i)).strftime('%b %Y'))
-            for i in range(12)
-        ]
+            # Generate month options
+            current = datetime.now()
+            month_options = [
+                ((current - relativedelta(months=i)).strftime('%Y-%m'),
+                 (current - relativedelta(months=i)).strftime('%b %Y'))
+                for i in range(12)
+            ]
 
-        # Handle profile picture
-        image_data = None
-        if user_data.get('profile_picture'):
-            try:
-                image_data = base64.b64encode(user_data['profile_picture']).decode('utf-8')
-            except Exception as e:
-                print(f"Error encoding profile picture: {e}")
+            # Handle profile picture
+            image_data = None
+            if user_data.get('profile_picture'):
+                try:
+                    image_data = base64.b64encode(user_data['profile_picture']).decode('utf-8')
+                except Exception as e:
+                    logger.error(f"Error encoding profile picture: {e}")
 
-        # Fetch monthly trends data for stacked bar chart
-        current = datetime.now()
-        months = []
-        expenses = []
-        savings = []
+            # Fetch monthly trends data for stacked bar chart
+            current = datetime.now()
+            months = []
+            expenses = []
+            savings = []
 
-        # Get data for last 12 months
-        for i in range(12):
-            month = (current - relativedelta(months=i)).strftime('%Y-%m')
-            months.append((current - relativedelta(months=i)).strftime('%b %Y'))
-            
-            # Get expenses for this month
-            cursor.execute("""
-                SELECT COALESCE(SUM(total_amount), 0) as total_expense
-                FROM Bill 
-                WHERE user_id = %s 
-                AND to_char(invoice_date, 'YYYY-MM') = %s
-            """, (session['user_id'], month))
-            total_expense = float(cursor.fetchone()['total_expense'])
-            expenses.append(total_expense)
-            
-            # Get budget and calculate savings
-            cursor.execute("""
-                SELECT budget 
-                FROM MonthlyBudget 
-                WHERE user_id = %s AND month = %s
-            """, (session['user_id'], month))
-            budget_info = cursor.fetchone()
-            total_budget = float(budget_info['budget']) if budget_info else 0
-            savings.append(max(total_budget - total_expense, 0))
+            # Get data for last 12 months
+            for i in range(12):
+                month = (current - relativedelta(months=i)).strftime('%Y-%m')
+                months.append((current - relativedelta(months=i)).strftime('%b %Y'))
 
-        # Reverse lists to show oldest to newest
-        months.reverse()
-        expenses.reverse()
-        savings.reverse()
+                # Get expenses for this month
+                cursor.execute("""
+                    SELECT COALESCE(SUM(total_amount), 0) as total_expense
+                    FROM Bill
+                    WHERE user_id = %s
+                    AND to_char(invoice_date, 'YYYY-MM') = %s
+                """, (session['user_id'], month))
+                total_expense = float(cursor.fetchone()['total_expense'])
+                expenses.append(total_expense)
 
-        return render_template(
-            'dashboard.html',
-            username=user_data['username'],
-            email=user_data['email'],
-            total_sum=total_sum,
-            spent_amount=spent_amount,
-            budget_percentage=budget_percentage,
-            budget_remaining=budget_remaining,
-            yearly_remaining=yearly_remaining,
-            yearly_expenses=yearly_expenses,
-            yearly_budget=yearly_budget,
-            budget_yearpercentage=budget_yearpercentage,
-            current_month=selected_month,
-            month_options=month_options,
-            image_data=image_data,
-            monthly_expense_total=total_sum,
-            months=months,
-            expenses=expenses,
-            total_budget=total_budget,
-            savings=savings
-            
-        )
+                # Get budget and calculate savings
+                cursor.execute("""
+                    SELECT budget
+                    FROM MonthlyBudget
+                    WHERE user_id = %s AND month = %s
+                """, (session['user_id'], month))
+                budget_info = cursor.fetchone()
+                total_budget = float(budget_info['budget']) if budget_info else 0
+                savings.append(max(total_budget - total_expense, 0))
+
+            # Reverse lists to show oldest to newest
+            months.reverse()
+            expenses.reverse()
+            savings.reverse()
+
+            return render_template(
+                'dashboard.html',
+                username=user_data['username'],
+                email=user_data['email'],
+                total_sum=total_sum,
+                spent_amount=spent_amount,
+                budget_percentage=budget_percentage,
+                budget_remaining=budget_remaining,
+                yearly_remaining=yearly_remaining,
+                yearly_expenses=yearly_expenses,
+                yearly_budget=yearly_budget,
+                budget_yearpercentage=budget_yearpercentage,
+                current_month=selected_month,
+                month_options=month_options,
+                image_data=image_data,
+                monthly_expense_total=total_sum,
+                months=months,
+                expenses=expenses,
+                total_budget=total_budget,
+                savings=savings
+
+            )
+
+    except Exception as e:
+        logger.error(f"Dashboard error: {e}")
+        flash('Error loading dashboard data', 'error')
+        return redirect(url_for('login'))
 
 @app.route('/upload_bill', methods=['POST'])
 def upload_bill():
@@ -557,58 +514,67 @@ def upload_bill():
 
     try:
         bill_processor = BillProcessor()
-        
-        if file.filename.lower().endswith('.pdf'):
-            # For PDFs, save temporarily to extract text
-            temp_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename))
-            file.save(temp_path)
-            try:
-                extracted_text = bill_processor.process_pdf(temp_path)
-            finally:
-                # Clean up temporary file
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-        else:
-            # For images, send directly to Gemini
-            extracted_text = bill_processor.process_image(file)
 
-        if not extracted_text:
-            flash('Could not extract text from file', 'danger')
-            return redirect(url_for('dashboard'))
-
-        # Process extracted text
-        results = bill_processor.process_text_with_gemini(extracted_text)
-        
-        if not results:
-            flash('No bill information could be extracted', 'danger')
-            return redirect(url_for('dashboard'))
-
-        # Store results in database
-        db = get_db()
-        with db.cursor() as cursor:
-            for bill in results:
-                if bill.get('total_amount') and bill.get('category'):
-                    cursor.execute("""
-                        INSERT INTO Bill 
-                        (user_id, total_amount, category, invoice_date, confidence_level)
-                        VALUES (%s, %s, %s, %s, %s)
-                        RETURNING bill_id
-                    """, (
-                        session['user_id'],
-                        float(bill['total_amount']),
-                        bill['category'],
-                        bill['invoice_date'],
-                        bill['confidence']
-                    ))
-            db.commit()
-            flash('Bill processed and stored successfully!', 'success')
-
+        # Use a temporary file to store the uploaded bill
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp_file:
+            file.save(tmp_file.name)
+            temp_file_path = tmp_file.name
     except Exception as e:
-        print(f"Error processing bill: {e}")
-        if 'db' in locals():
+        logger.error(f"Error creating temporary file: {e}")
+        flash('Error processing file', 'danger')
+        return redirect(url_for('dashboard'))
+
+        try:
+            if file.filename.lower().endswith('.pdf'):
+                extracted_text = bill_processor.process_pdf(temp_file_path)
+            else:
+                # Reopen the temporary file for reading
+                with open(temp_file_path, 'rb') as img_file:
+                    extracted_text = bill_processor.process_image(img_file)
+
+            if not extracted_text:
+                flash('Could not extract text from file', 'danger')
+                return redirect(url_for('dashboard'))
+
+            # Process extracted text
+            results = bill_processor.process_text_with_gemini(extracted_text)
+
+            if not results:
+                flash('No bill information could be extracted', 'danger')
+                return redirect(url_for('dashboard'))
+
+            # Store results in database
+            db = get_db()
+            with db.cursor() as cursor:
+                for bill in results:
+                    if bill.get('total_amount') and bill.get('category'):
+                        cursor.execute("""
+                            INSERT INTO Bill
+                            (user_id, total_amount, category, invoice_date, confidence_level)
+                            VALUES (%s, %s, %s, %s, %s)
+                            RETURNING bill_id
+                        """, (
+                            session['user_id'],
+                            float(bill['total_amount']),
+                            bill['category'],
+                            bill['invoice_date'],
+                            bill['confidence']
+                        ))
+                db.commit()
+                flash('Bill processed and stored successfully!', 'success')
+
+        except Exception as e:
+            logger.error(f"Error processing bill: {e}")
             db.rollback()
-        flash(f'Error processing file: {str(e)}', 'danger')
-        
+            flash(f'Error processing file: {str(e)}', 'danger')
+
+        finally:
+            # Clean up temporary file
+            try:
+                os.remove(temp_file_path)
+            except OSError as e:
+                logger.warning(f"Error removing temporary file: {e}")
+
     return redirect(url_for('dashboard'))
 
 @app.route('/get_expense_breakdown', methods=['GET'])
@@ -617,29 +583,29 @@ def get_expense_breakdown():
         return jsonify({'error': 'Not logged in'}), 401
 
     selected_month = request.args.get('month', datetime.now().strftime('%Y-%m'))
-    
+
     try:
         db = get_db()
         with db.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute("""
                 WITH monthly_totals AS (
                     SELECT SUM(total_amount) as month_total
-                    FROM Bill 
-                    WHERE user_id = %s 
+                    FROM Bill
+                    WHERE user_id = %s
                     AND date_trunc('month', invoice_date)::date = to_date(%s, 'YYYY-MM')
                 )
-                SELECT 
+                SELECT
                     category,
                     COALESCE(SUM(total_amount), 0) as total_amount,
                     (SELECT month_total FROM monthly_totals) as month_total
-                FROM Bill 
-                WHERE user_id = %s 
+                FROM Bill
+                WHERE user_id = %s
                 AND date_trunc('month', invoice_date)::date = to_date(%s, 'YYYY-MM')
                 GROUP BY category
             """, (session['user_id'], selected_month, session['user_id'], selected_month))
-            
+
             expenses = cursor.fetchall()
-            
+
             if not expenses:
                 return jsonify({
                     'category': [],
@@ -651,7 +617,6 @@ def get_expense_breakdown():
             amounts = [float(row['total_amount']) for row in expenses]
             month_total = float(expenses[0]['month_total'] or 0)
 
-
             return jsonify({
                 'category': categories,
                 'total_amount': amounts,
@@ -659,12 +624,13 @@ def get_expense_breakdown():
             })
 
     except Exception as e:
-        print(f"Error fetching expense breakdown: {e}")
+        logger.error(f"Error fetching expense breakdown: {e}")
         return jsonify({
             'category': [],
             'total_amount': [],
             'month_total': 0
         })
+
 
 @app.route('/get_recent_bills', methods=['GET'])
 def get_recent_bills():
@@ -672,31 +638,32 @@ def get_recent_bills():
         return jsonify({'error': 'Not logged in'}), 401
 
     selected_month = request.args.get('month', datetime.now().strftime('%Y-%m'))
-    
+
     try:
         db = get_db()
         with db.cursor() as cursor:
             cursor.execute("""
-                SELECT invoice_date::date, category, total_amount 
-                FROM Bill 
-                WHERE user_id = %s 
+                SELECT invoice_date::date, category, total_amount
+                FROM Bill
+                WHERE user_id = %s
                 AND to_char(invoice_date, 'YYYY-MM') = %s
                 ORDER BY invoice_date DESC
             """, (session['user_id'], selected_month))
-            
+
             bills = cursor.fetchall()
-            
+
             bill_list = [{
                 'date': bill['invoice_date'].strftime('%Y-%m-%d'),
                 'category': bill['category'],
                 'amount': float(bill['total_amount'])
             } for bill in bills]
-            
+
             return jsonify({'bills': bill_list})
-            
+
     except Exception as e:
-        print(f"Error fetching recent bills: {e}")
+        logger.error(f"Error fetching recent bills: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/set_budget', methods=['POST'])
 def set_budget():
@@ -716,19 +683,20 @@ def set_budget():
             cursor.execute("""
                 INSERT INTO MonthlyBudget (user_id, budget, month, spent)
                 VALUES (%s, %s, %s, 0)
-                ON CONFLICT (user_id, month) 
+                ON CONFLICT (user_id, month)
                 DO UPDATE SET budget = EXCLUDED.budget
                 RETURNING budget
             """, (session['user_id'], budget, current_month))
             db.commit()
-            
+
         flash('Budget set successfully!', 'success')
         return redirect(url_for('dashboard'))
 
     except Exception as e:
-        print(f"Error setting budget: {e}")
+        logger.error(f"Error setting budget: {e}")
         flash('Error setting budget', 'error')
         return redirect(url_for('dashboard'))
+
 
 @app.route('/get_monthly_expense_total', methods=['GET'])
 def get_monthly_expense_total():
@@ -737,27 +705,33 @@ def get_monthly_expense_total():
 
     selected_month = request.args.get('month', datetime.now().strftime('%Y-%m'))
 
-    db = get_db()
-    with db.cursor() as cursor:
-        cursor.execute("""
-            SELECT COALESCE(SUM(total_amount), 0) as total
-            FROM Bill
-            WHERE user_id = %s
-            AND to_char(invoice_date, 'YYYY-MM') = %s
-        """, (session['user_id'], selected_month))
-        result = cursor.fetchone()
-        total = float(result['total']) if result['total'] else 0.0
+    try:
+        db = get_db()
+        with db.cursor() as cursor:
+            cursor.execute("""
+                SELECT COALESCE(SUM(total_amount), 0) as total
+                FROM Bill
+                WHERE user_id = %s
+                AND to_char(invoice_date, 'YYYY-MM') = %s
+            """, (session['user_id'], selected_month))
+            result = cursor.fetchone()
+            total = float(result['total']) if result['total'] else 0.0
 
-    return jsonify({'total_expense': total})
+        return jsonify({'total_expense': total})
+
+    except Exception as e:
+        logger.error(f"Error in get_monthly_expense_total: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/get_monthly_budget', methods=['GET'])
 def get_monthly_budget():
     if 'user_id' not in session:
         return jsonify({'error': 'Not logged in'}), 401
-    
+
     curr_month = datetime.now().strftime('%Y-%m')
-    
-    try: 
+
+    try:
         db = get_db()
         with db.cursor() as cursor:
             cursor.execute("""
@@ -766,16 +740,17 @@ def get_monthly_budget():
                 WHERE user_id = %s AND month = %s
             """, (session['user_id'], curr_month))
             result = cursor.fetchone()
-               
+
             curr_budget = float(result['budget']) if result and result['budget'] is not None else 0.0
-    
+
             response_data = {'monthly_budget': curr_budget}
-            
+
             return jsonify(response_data)
-    
+
     except Exception as e:
-        print(f"Error in get_monthly_budget: {e}")
+        logger.error(f"Error in get_monthly_budget: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/get_budget_for_selectmonth', methods=['GET'])
 def get_budget_for_selectmonth():
@@ -786,10 +761,10 @@ def get_budget_for_selectmonth():
 
     try:
         db = get_db()
-        with db.cursor() as cursor:  # Create a cursor
+        with db.cursor() as cursor:
             cursor.execute("""
-                SELECT budget 
-                FROM MonthlyBudget 
+                SELECT budget
+                FROM MonthlyBudget
                 WHERE user_id = %s AND month = %s
             """, (session['user_id'], selected_month))
             budget_info = cursor.fetchone()
@@ -804,8 +779,9 @@ def get_budget_for_selectmonth():
             })
 
     except Exception as e:
-        print(f"Error fetching monthly budget: {e}")
+        logger.error(f"Error fetching monthly budget: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+
 
 @app.route('/update_profile', methods=['POST'])
 def update_profile():
@@ -816,10 +792,10 @@ def update_profile():
         # Get form data
         name = request.form.get('name')
         profile_picture = request.files.get('profile_picture')
-        
+
         # Get database connection from pool
         db = get_db()
-        
+
         with db.cursor() as cursor:
             # Initialize query parts and parameters
             query_parts = []
@@ -830,19 +806,19 @@ def update_profile():
                 query_parts.append("username = %s")
                 params.append(name.strip())
 
-            # Handle pfp updat 
+            # Handle pfp updat
             if profile_picture and profile_picture.filename:
                 if not allowed_file(profile_picture.filename):
                     flash('Please upload a valid image file (JPG, PNG, or JPEG).', 'error')
                     return redirect(url_for('dashboard'))
-                
+
                 try:
                     # Read and process image data
                     image_data = profile_picture.read()
                     query_parts.append("profile_picture = %s")
                     params.append(image_data)
                 except Exception as e:
-                    print(f"Error processing image: {e}")
+                    logger.error(f"Error processing image: {e}")
                     flash('Error processing image file.', 'error')
                     return redirect(url_for('dashboard'))
 
@@ -864,11 +840,12 @@ def update_profile():
                 flash('No changes to update.', 'info')
 
     except Exception as e:
-        print(f"Profile update error: {e}")
+        logger.error(f"Profile update error: {e}")
         db.rollback()
         flash('An error occurred while updating your profile.', 'error')
-    
+
     return redirect(url_for('dashboard'))
+
 
 @app.route('/logout', methods=['POST'])
 def logout():
@@ -878,9 +855,10 @@ def logout():
 
     return redirect(url_for('login'))
 
+
 @app.route('/monthly-summary', methods=['POST'])
 def monthly_summary():
-    user_id = session.get('user_id')  
+    user_id = session.get('user_id')
     selected_month = request.json.get('month')
 
     if not user_id or not selected_month:
@@ -898,7 +876,7 @@ def monthly_summary():
                 LIMIT 1
             """, (user_id, selected_month))
             result = cursor.fetchone()
-            
+
             if result:
                 return jsonify({
                     "highest_category": {
@@ -909,7 +887,7 @@ def monthly_summary():
             return jsonify({"highest_category": None})
 
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         return jsonify({"error": "Internal server error"}), 500
         
 if __name__ == '__main__':
