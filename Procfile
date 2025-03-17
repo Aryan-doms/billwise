@@ -1,1 +1,1 @@
-web: gunicorn "src.app:app" --workers 2 --threads 4 --timeout 120 --log-level info
+web: gunicorn "src.app:app" --workers 1 --threads 4 --worker-class gthread --worker-tmp-dir /dev/shm --max-requests 1000 --max-requests-jitter 50

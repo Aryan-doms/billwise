@@ -4,7 +4,7 @@
 }
 .scrollbar-custom::-webkit-scrollbar-track {
   background: #f1f1f1;
-  border-radius: 10px; /* Optional: for smoother track appearance */
+  border-radius: 10px; 
 }
 .scrollbar-custom::-webkit-scrollbar-thumb {
   background: #888;
@@ -41,8 +41,7 @@
 
 .budget-progress-bar-filled {
   height: 100%;
-  background-color: #3b82f6; /* Blue color */
-  text-align: center;
+  background-color: #3b82f6; 
   color: white;
   font-size: 10px;
   line-height: 10px;
@@ -70,7 +69,7 @@
 
 /* Alert Styles */
 .budget-alert {
-  background-color: #facc15; /* Yellow background */
+  background-color: #facc15; 
   padding: 16px;
   border-radius: 8px;
   color: #1f2937;
@@ -85,7 +84,7 @@
 .budget-alert button {
   background: transparent;
   border: none;
-  color: #e11d48; /* Red color for dismiss button */
+  color: #e11d48; 
   font-weight: bold;
   cursor: pointer;
   font-size: 16px;
@@ -150,7 +149,7 @@
 }
 
 .budget-alert button:hover {
-  color: #e11d48; /* Change color on hover */
+  color: #e11d48;
   text-decoration: underline;
 }
 
@@ -158,7 +157,7 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Mobile Responsiveness Enhancements */
+/* Mobile Responsiveness layout */
 @media (max-width: 768px) {
 
   /* Budget Section Mobile Layout */

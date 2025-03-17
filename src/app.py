@@ -19,41 +19,41 @@ from functools import wraps
 import timeout_decorator
 from PyPDF2 import PdfReader
 
-# --- Configuration & Initialization ---
+# Configuration & Initialization ---
 app = Flask(__name__, static_folder='website/static', template_folder='website/templates')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
 
-# Logging (keep as is)
+# Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-load_dotenv()  # Load env vars early
+load_dotenv() 
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
     logger.error("GEMINI_API_KEY missing.")
     raise ValueError("GEMINI_API_KEY required")
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Railway-Optimized Configuration
-UPLOAD_FOLDER = '/tmp'  # Ephemeral storage
+# Railway Configuration
+UPLOAD_FOLDER = '/tmp'  
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
+MAX_FILE_SIZE = 2 * 1024 * 1024
 DATABASE_URL = os.getenv('DATABASE_URL')
 if not DATABASE_URL:
     logger.error("DATABASE_URL missing.")
     raise ValueError("DATABASE_URL required")
 
-# --- Database Connection Pool ---
+#db Connection
 db_pool = None
 
 def init_db_pool():
     global db_pool
     if db_pool is None:
         try:
-            db_pool = ThreadedConnectionPool(  # Use ThreadedConnectionPool
-                minconn=1,
-                maxconn=5,
+            db_pool = ThreadedConnectionPool(
+                minconn=1,    
+                maxconn=3,   
                 dsn=DATABASE_URL,
                 keepalives=1,
                 keepalives_idle=30,
@@ -65,11 +65,11 @@ def init_db_pool():
             logger.error(f"Database connection error: {e}")
             raise
 
-    # Test connection
+    # Test conn
     with db_pool.getconn() as conn:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT 1")  # Simple query to test connectivity
-            cursor.fetchone()  # Fetch the result to ensure query execution
+            cursor.execute("SELECT 1") 
+            cursor.fetchone() 
     logger.info("Database connection tested successfully")
 
 
@@ -117,7 +117,7 @@ def init_db():
             db.rollback()
             print(f"Error initializing database: {e}")
 
-# --- File Handling ---
+# file rules
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'png'}
 
 def allowed_file(filename):
@@ -138,7 +138,7 @@ def validate_file(file):
 
     return True, "File is valid"
 
-# --- Bill Processing ---
+# Bill Processing
 class BillProcessor:
     def __init__(self):
         self.model = genai.GenerativeModel('gemini-1.5-flash')
@@ -225,7 +225,7 @@ class BillProcessor:
             return []
 
 
-# --- Route Decorators ---
+# Route Decorators
 def handle_timeout(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -236,7 +236,7 @@ def handle_timeout(func):
             return jsonify({'error': 'Request timed out'}), 504
     return wrapper
 
-# --- Routes ---
+# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -315,7 +315,7 @@ def dashboard():
     try:
         db = get_db()
         with db.cursor() as cursor:
-            # Fetch user details
+            # user details
             cursor.execute("""
                 SELECT username, email, profile_picture
                 FROM Users WHERE user_id = %s
@@ -325,13 +325,13 @@ def dashboard():
                 flash('User not found', 'error')
                 return redirect(url_for('login'))
 
-            # Initialize default values
+            # init default values
             yearly_expenses = 0
             yearly_budget = 0
             total_sum = 0
             spent_amount = 0
 
-            # Fetch yearly expenses
+            #  yearly expenses
             cursor.execute("""
                 SELECT COALESCE(SUM(total_amount), 0) as yearly_expenses
                 FROM Bill
@@ -340,7 +340,7 @@ def dashboard():
             """, (session['user_id'], current_year))
             yearly_expenses = cursor.fetchone()[0] or 0
 
-            # Fetch yearly budget
+            #  yearly budget
             cursor.execute("""
                 SELECT COALESCE(SUM(budget), 0) as yearly_budget
                 FROM MonthlyBudget
@@ -349,7 +349,7 @@ def dashboard():
             """, (session['user_id'], f"{current_year}%"))
             yearly_budget = cursor.fetchone()[0] or 0
 
-            # Fetch monthly data
+            #  monthly data
             current_month = datetime.now().strftime('%Y-%m')
             cursor.execute("""
                 SELECT budget
@@ -385,7 +385,7 @@ def dashboard():
                 for i in range(12)
             ]
 
-            # Handle profile picture
+            # Handle pfp
             image_data = None
             if user_data.get('profile_picture'):
                 try:
@@ -479,17 +479,16 @@ def upload_bill():
     try:
         bill_processor = BillProcessor()
         
-        # Use a context manager for temporary files
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             file.save(tmp_file.name)
             
             if file.filename.lower().endswith('.pdf'):
                 extracted_text = bill_processor.process_pdf(tmp_file.name)
             else:
-                file.seek(0)  # Reset file pointer
+                file.seek(0) 
                 extracted_text = bill_processor.process_image(file)
 
-            # Clean up temp file
+
             os.unlink(tmp_file.name)
 
             if not extracted_text:

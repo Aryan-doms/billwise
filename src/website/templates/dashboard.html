@@ -186,7 +186,7 @@
                                 </tr>
                             </thead>
                             <tbody id="recent-bills-tbody">
-                                <!-- Rows will be dynamically inserted here -->
+                                <!-- Rows will be dyanically show here -->
                             </tbody>
                         </table>
                     </div>
@@ -245,13 +245,11 @@
                         <p class="text-lg font-semibold text-gray-600">₹{{ budget_remaining }}</p>
                     </div>
                 </div>
-                
-                <!-- Progress Bar -->
+
                 <!-- Progress Bar -->
                 <div class="bg-white rounded-lg p-4 mt-4">
                     <h4 class="text-lg font-semibold text-gray-600">Budget Usage</h4>
                     <div class="w-full bg-gray-200 rounded-full">
-                        <!-- Conditional color change based on budget percentage -->
                         <div class="text-xs font-medium text-white text-center p-1 leading-none rounded-full"
                             style="width: {{ budget_percentage if budget_percentage <= 100 else 100 }}%; background: {{ '#ef4444' if budget_percentage > 80 else 'linear-gradient(to right, #6366f1, #ef4444)' }};">
                             {{ budget_percentage if budget_percentage <= 100 else 100 }}%
@@ -327,7 +325,6 @@
         
                 <!-- Form for uploading profile picture and changing name -->
                 <form action="{{ url_for('update_profile') }}" method="POST" enctype="multipart/form-data">
-                    <!-- Optional Profile Picture -->
                     <div class="mt-4">
                         <label class="block text-sm font-medium text-gray-600">Change Profile Picture</label>
                         <input type="file" name="profile_picture" accept="image/*" class="mt-1 block w-full text-sm text-gray-800">
@@ -363,11 +360,9 @@
 
     </main>
 
-    <!-- Replace the existing budget modal div with this simplified version -->
     <div id="budget-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <h2 class="text-xl md:text-2xl font-bold mb-4 text-gray-800">Set Monthly Budget</h2>
-            <!-- Simple form with POST method -->
             <form method="POST" action="/set_budget">
                 <div class="space-y-4">
                     <input type="number" 
@@ -395,7 +390,6 @@
     
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        //--- DOM Element Cache ---
         const tabs = document.querySelectorAll('.dashboard-tab');
         const sections = document.querySelectorAll('.dashboard-content');
         const monthSelect = document.getElementById('month-select');
@@ -417,16 +411,16 @@
         const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
         const sidebar = document.getElementById('sidebar');
 
-        //--- Data from Template ---
+        // Data from Template 
         const months = JSON.parse('{{ months | tojson | safe }}');
         const expenses = JSON.parse('{{ expenses | tojson | safe }}');
         const savings = JSON.parse('{{ savings | tojson | safe }}');
         const currentMonth = monthSelect ? monthSelect.value : '{{ current_month }}';
 
-        //--- Chart Initialization ---
+        // Chart Initialization 
         initStackedBarChart(months, expenses, savings);
 
-        //--- Mobile Menu ---
+        // Mobile Menu 
         mobileMenuToggle.addEventListener('click', function() {
             sidebar.classList.toggle('-translate-x-full');
         });
@@ -439,17 +433,17 @@
             }
         });
 
-        //--- Tab Navigation ---
+        // Tab Navigation 
         tabs.forEach(tab => {
             tab.addEventListener('click', () => handleTabClick(tab));
         });
 
-        //--- Initial Dashboard Update ---
+        //Initial Dashboard Update 
         if (currentMonth) {
             updateDashboard(currentMonth);
         }
 
-        //--- Event Listeners ---
+        // Event Listeners 
         if (monthSelect) {
             monthSelect.addEventListener('change', (e) => updateDashboard(e.target.value));
         }
@@ -480,7 +474,7 @@
             closeModalBtn.addEventListener('click', () => toggleClass(editProfileModal, 'flex', 'hidden'));
         }
 
-        //--- Data Fetching and Rendering Functions ---
+        // Data Fetching and Rendering Functions 
 
         function updateExpenseBreakdownChart(selectedMonth) {
             fetch(`/get_expense_breakdown?month=${selectedMonth}`)
@@ -552,7 +546,7 @@
             }
         }
 
-        //--- Helper Functions ---
+        // Helper Functions 
         function handleTabClick(tab) {
             const target = tab.getAttribute('data-target');
             tabs.forEach(t => t.classList.remove('active'));
@@ -683,11 +677,10 @@
                 }
             });
         }
-        // calling function 
         fetchMonthlyBudget();
     });
 
-    //--- Budget Alert Functions ---
+    // Budget Alert Functions 
     function closeBudgetAlert() {
         const alert = document.getElementById('budget-alert');
         if (alert) {
@@ -705,19 +698,15 @@
         });
     });
 
-    //--- Highest Spend Functions ---
+    // Highest Spend Functions 
     document.addEventListener('DOMContentLoaded', function () {
         const monthSelect = document.getElementById('month-select');
 
-        // Function to fetch the highest spend for a given month
         function fetchHighestSpend(month) {
-            const userId = 1; // Assuming user_id is 1 (you can dynamically set this based on logged-in user)
-
-            // Make a POST request to fetch data for the selected month
             fetch('/monthly-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ month: month, user_id: userId }) // Include user_id
+                body: JSON.stringify({ month: month }) 
             })
             .then(response => {
                 if (!response.ok) {
@@ -728,11 +717,8 @@
             .then(data => {
                 const highestSpendDiv = document.getElementById('highest-spend');
 
-                // Update the "Highest Spend" section with data or a placeholder
                 if (data.highest_category) {
                     const { category, total_spent } = data.highest_category;
-
-                    // Ensure total_spent is a number and format it correctly
                     highestSpendDiv.innerText = `${category}: ₹${parseFloat(total_spent).toFixed(2)}`;
                 } else {
                     highestSpendDiv.innerText = "No data available.";
@@ -740,20 +726,19 @@
             })
             .catch(error => {
                 console.error('Error fetching monthly summary:', error);
+                const highestSpendDiv = document.getElementById('highest-spend');
+                highestSpendDiv.innerText = "Error loading data";
             });
         }
-        if(monthSelect){
-             // Get the current month in 'YYYY-MM' format
-            const currentMonth = new Date().toISOString().slice(0, 7); // Example: '2024-12'
 
-            // Set the current month as the selected value in the dropdown
+        if(monthSelect){
+            const currentMonth = new Date().toISOString().slice(0, 7); // Get the current month in 'YYYY-MM' format
+
             monthSelect.value = currentMonth;
 
-            // Trigger the function to fetch the highest spend for the current month
             fetchHighestSpend(currentMonth);
-            // Listen for month changes and update accordingly
             monthSelect.addEventListener('change', function () {
-                const selectedMonth = this.value; // Get selected month in 'YYYY-MM' format
+                const selectedMonth = this.value;
                 fetchHighestSpend(selectedMonth);
             });
         }
@@ -761,47 +746,41 @@
 
     });
 
-    //--- Progress Bar Functions ---
+    // Progress Bar Functions 
     const budgetPercentage = JSON.parse('{{ budget_percentage | tojson | safe }}');
 
-    // Get the progress bar element by its ID
     const progressBar = document.getElementById('progress-bar');
 
     // Check if the budget percentage is within the valid range (0-100)
     if (progressBar){
         if (budgetPercentage >= 0 && budgetPercentage <= 100) {
-            // Set the width of the progress bar based on the budget percentage
-            // Optionally update the text content inside the progress bar
             progressBar.innerText = budgetPercentage + '%';
         } else {
-            // If the value is invalid, set the width to 0% and display 0%
             progressBar.style.width = '0%';
             progressBar.innerText = '0%';
         }
     }
 
 
-    //--- Scroll to Expenses Section on Load ---
+    // Scroll to Expenses Section on Load 
     window.onload = function() {
-        // Check if the URL contains the hash "#expenses"
         if (window.location.hash === "#expenses") {
             const expensesSection = document.getElementById('expenses-section');
             if (expensesSection) {
-                expensesSection.classList.remove('hidden'); // Show the expenses section
-                expensesSection.scrollIntoView({ behavior: "smooth" }); // Scroll to it smoothly
+                expensesSection.classList.remove('hidden'); 
+                expensesSection.scrollIntoView({ behavior: "smooth" }); 
             }
         }
     };
 
 
-    //--- Month Selection, Expense Chart, and Bills Table Functions (Refactored) ---
+    // Month Selection, Expense Chart, and Bills Table Functions 
     document.addEventListener('DOMContentLoaded', function() {
         const monthSelect = document.getElementById('month-select');
         const stackedBarChartCtx = document.getElementById('stackedBarChart').getContext('2d');
 
         // Function to handle month selection
         function handleMonthSelection(selectedMonth) {
-            // Update expense breakdown chart
             fetch(`/get_expense_breakdown?month=${selectedMonth}`)
                 .then(response => response.json())
                 .then(data => {
@@ -836,7 +815,6 @@
                     console.error('Error fetching monthly expense:', error);
                 });
 
-            // Update highest spend
             fetchHighestSpend(selectedMonth);
         }
 
@@ -865,7 +843,7 @@
         // Expense chart rendering function
         function renderExpenseChart(data) {
             const expenseChart = document.getElementById('expense-chart');
-            expenseChart.innerHTML = ''; // Clear previous chart
+            expenseChart.innerHTML = ''; 
 
             if (!data || data.category.length === 0) {
                 expenseChart.innerHTML = '<p class="text-center text-gray-500">No expenses for this month</p>';
@@ -903,7 +881,7 @@
         // Bills table rendering function
         function renderBillsTable(bills) {
             const tableBody = document.querySelector('#recent-bills-tbody');
-            tableBody.innerHTML = ''; // Clear previous bills
+            tableBody.innerHTML = ''; 
 
             if (bills.length === 0) {
                 tableBody.innerHTML = `
@@ -961,7 +939,6 @@
             const currentMonth = new Date().toISOString().slice(0, 7);
             handleMonthSelection(currentMonth);
         }
-
     });
 </script>
 </body>
