@@ -12,20 +12,18 @@ BillWise is a Flask-based web application designed for efficient bill processing
 ## Project Structure
 
 ```
-BillWise/
-├── api/
-│   └── index.py              # Entry point for Vercel serverless
+BillWise/ 
 ├── src/
 │   ├── app.py               # Main Flask application
 │   ├── schema.sql           # Database schema
 │   └── website/
-│       ├── static/          # CSS, JS, images
+│       ├── static/          # asset
 │       └── templates/       # HTML files
-├── .env                     # Environment variables (don't commit)
+├── .env                     # sushhhh things 
 ├── .gitignore               # Git ignore rules
 ├── README.md                # Project documentation
 ├── requirements.txt         # Project dependencies
-└── vercel.json              # Vercel configuration
+└── Procfile                 # For Railway
 ```
 
 ## Installation
@@ -59,6 +57,9 @@ BillWise/
 
 2. **Access the Web App:**
    Open `http://127.0.0.1:5000` in your browser.
+
+## it's LIVEEEEEEE
+   https://bit.ly/Billwise CHECKKKK IT OUTTTTT   
 
 ## Contributing
 
