@@ -53,7 +53,7 @@ def init_db_pool():
         try:
             db_pool = ThreadedConnectionPool(
                 minconn=1,    
-                maxconn=3,   
+                maxconn=4,   
                 dsn=DATABASE_URL,
                 keepalives=1,
                 keepalives_idle=30,
