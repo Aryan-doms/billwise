@@ -244,6 +244,10 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Clear any success messages when accessing login page
+    if request.method == 'GET':
+        session.pop('_flashes', None)  # Clear all flash messages on GET
+
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
@@ -460,20 +464,21 @@ def dashboard():
 @app.route('/upload_bill', methods=['POST'])
 def upload_bill():
     if 'user_id' not in session:
-        return jsonify({'error': 'Not logged in'}), 401
+        flash('Please log in to continue', 'info')
+        return redirect(url_for('login'))
 
     if 'bill_file' not in request.files:
-        flash('No file part', 'danger')
+        flash('No file selected', 'info')
         return redirect(url_for('dashboard'))
 
     file = request.files['bill_file']
     if file.filename == '':
-        flash('No selected file', 'danger')
+        flash('Please select a file', 'info')
         return redirect(url_for('dashboard'))
 
     is_valid, message = validate_file(file)
     if not is_valid:
-        flash(message, 'danger')
+        flash(message, 'info')
         return redirect(url_for('dashboard'))
 
     try:
@@ -492,13 +497,13 @@ def upload_bill():
             os.unlink(tmp_file.name)
 
             if not extracted_text:
-                flash('Could not extract text from file', 'danger')
+                flash('Could not extract text from file', 'info')
                 return redirect(url_for('dashboard'))
 
             results = bill_processor.process_text_with_gemini(extracted_text)
 
             if not results:
-                flash('No bill information could be extracted', 'danger')
+                flash('No bill information could be extracted', 'info')
                 return redirect(url_for('dashboard'))
 
             db = get_db()
@@ -517,15 +522,15 @@ def upload_bill():
                                 bill['confidence']
                             ))
                 db.commit()
-                flash('Bill processed and stored successfully!', 'success')
+                flash('Bill processed successfully!', 'success')
             except Exception as db_error:
                 db.rollback()
                 logger.error(f"Database error: {db_error}")
-                flash('Error saving bill data', 'danger')
+                flash('Unable to save bill data', 'info')
 
     except Exception as e:
         logger.error(f"Bill processing error: {e}")
-        flash('Error processing bill', 'danger')
+        flash('Unable to process bill', 'info')
 
     return redirect(url_for('dashboard'))
 
