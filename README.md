@@ -30,7 +30,7 @@ BillWise/
 
 1. **Clone the Repository:**
    ```sh
-   git clone <repository-url>
+   git clone https://github.com/Aryan-doms/my-flask-app
    cd BillWise
    ```
 
