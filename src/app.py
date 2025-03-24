@@ -278,18 +278,35 @@ def register():
         return render_template('register.html')
 
     if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        username = request.form['username']
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        username = request.form.get('username', '').strip()
+
+        # Validate required fields
+        if not email or not password or not username:
+            flash('All fields are required', 'error')
+            return redirect(url_for('register'))
+
+        # Basic email validation
+        if '@' not in email or '.' not in email:
+            flash('Please enter a valid email address', 'error')
+            return redirect(url_for('register'))
+
+        # Password validation
+        if len(password) < 8:
+            flash('Password must be at least 8 characters long', 'error')
+            return redirect(url_for('register'))
 
         try:
             db = get_db()
             with db.cursor() as cursor:
-                cursor.execute("SELECT * FROM Users WHERE email = %s", (email,))
+                # Check for existing email
+                cursor.execute("SELECT user_id FROM Users WHERE email = %s", (email,))
                 if cursor.fetchone():
                     flash('Email already registered', 'error')
-                    return redirect(url_for('login'))
+                    return redirect(url_for('register'))
 
+                # Insert new user
                 cursor.execute(
                     "INSERT INTO Users (email, password, username) VALUES (%s, %s, %s) RETURNING user_id",
                     (email, generate_password_hash(password), username)
@@ -297,15 +314,18 @@ def register():
                 user_id = cursor.fetchone()[0]
                 db.commit()
 
-                session['user_id'] = user_id
-                session['username'] = username
-                flash('Registration successful!', 'success')
+                flash('Registration successful! Please log in.', 'success')
                 return redirect(url_for('login'))
 
+        except psycopg2.IntegrityError as e:
+            db.rollback()
+            logger.error(f"Database integrity error: {e}")
+            flash('Registration failed - please try again', 'error')
+            return redirect(url_for('register'))
         except Exception as e:
             db.rollback()
-            flash('Registration failed', 'error')
             logger.error(f"Registration error: {e}")
+            flash('An unexpected error occurred', 'error')
             return redirect(url_for('register'))
 
 @app.route('/dashboard')
