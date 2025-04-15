@@ -59,7 +59,7 @@ BillWise/
    Open `http://127.0.0.1:5000` in your browser.
 
 ## it's LIVEEEEEEE
-   https://bit.ly/Billwise CHECKKKK IT OUTTTTT   
+   billwise.ddns.net CHECKKKK IT OUTTTTT   
 
 ## Contributing
 
