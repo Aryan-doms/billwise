@@ -82,9 +82,12 @@ def init_db_pool():
         if conn:
             db_pool.putconn(conn)  # Always return the connection
 
-
-with app.app_context():
-    init_db_pool()
+# Initialize database pool lazily - only when first needed
+def get_db_pool():
+    global db_pool
+    if db_pool is None:
+        init_db_pool()
+    return db_pool
 
 
 @app.before_request
@@ -95,7 +98,7 @@ def before_request():
 @app.teardown_appcontext
 def close_db(error):
     db = getattr(g, 'db', None)
-    if db is not None:
+    if db is not None and db_pool is not None:
         try:
             if error:
                 db.rollback()
@@ -107,7 +110,8 @@ def close_db(error):
 def get_db():
     if 'db' not in g:
         try:
-            g.db = db_pool.getconn()
+            pool = get_db_pool()  # Use lazy initialization
+            g.db = pool.getconn()
             g.db.cursor_factory = DictCursor
             logger.debug("New database connection acquired from pool.")
         except Exception as e:
