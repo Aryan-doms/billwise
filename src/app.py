@@ -23,6 +23,10 @@ from PyPDF2 import PdfReader
 app = Flask(__name__, static_folder='website/static', template_folder='website/templates')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
 
+@app.template_filter('format_number')
+def format_number(value):
+    return f"{value:.2f}"
+
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -51,9 +55,10 @@ def init_db_pool():
     global db_pool
     if db_pool is None:
         try:
+            # Increase pool size from 4 to 10
             db_pool = ThreadedConnectionPool(
                 minconn=1,    
-                maxconn=4,   
+                maxconn=10,   # Increased from 4 to 10
                 dsn=DATABASE_URL,
                 keepalives=1,
                 keepalives_idle=30,
@@ -65,12 +70,17 @@ def init_db_pool():
             logger.error(f"Database connection error: {e}")
             raise
 
-    # Test conn
-    with db_pool.getconn() as conn:
+    # Test connection correctly with proper connection handling
+    conn = None
+    try:
+        conn = db_pool.getconn()
         with conn.cursor() as cursor:
             cursor.execute("SELECT 1") 
             cursor.fetchone() 
-    logger.info("Database connection tested successfully")
+        logger.info("Database connection tested successfully")
+    finally:
+        if conn:
+            db_pool.putconn(conn)  # Always return the connection
 
 
 with app.app_context():
@@ -89,9 +99,10 @@ def close_db(error):
         try:
             if error:
                 db.rollback()
-        finally:
             db_pool.putconn(db)
             logger.debug("Database connection returned to pool.")
+        except Exception as e:
+            logger.error(f"Error returning connection to pool: {e}")
 
 def get_db():
     if 'db' not in g:
@@ -141,89 +152,89 @@ def validate_file(file):
 # Bill Processing
 class BillProcessor:
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
-
-    def print_processing_summary(self, file_path, file_type, text_length):
-        logger.info(f"Processing {os.path.basename(file_path)}, Type: {file_type}, Text Length: {text_length}")
+        # Use gemini-2.0-flash-lite for better efficiency and lower cost
+        self.model = genai.GenerativeModel('gemini-2.0-flash-lite')
 
     def process_pdf(self, pdf_path):
         try:
-            reader = PdfReader(pdf_path)
-            text_content = ""
-            for page in reader.pages:
-                text_content += page.extract_text() + "\n"
-            return text_content.strip()
+            logger.info(f"Processing PDF: {os.path.basename(pdf_path)}")
+            with open(pdf_path, 'rb') as file:
+                pdf_data = file.read()
+            
+            return self.extract_bill_data(pdf_data, "application/pdf")
+            
         except Exception as e:
             logger.error(f"PDF processing error: {e}")
             return None
 
     def process_image(self, image_file):
         try:
-            image_parts = [{"mime_type": image_file.content_type, "data": image_file.read()}]
-            prompt = "Extract text from this image and return the text as a plain string."
-            response = self.model.generate_content([prompt, *image_parts])
-            return response.text if response.text else None
+            logger.info(f"Processing image: {image_file.filename}")
+            # No need to read here - file was already rewound in upload_bill
+            return self.extract_bill_data(image_file.read(), image_file.content_type)
         except Exception as e:
-            logger.error(f"Gemini image processing error: {e}")
+            logger.error(f"Image processing error: {e}")
             return None
-
-    def process_text_with_gemini(self, extracted_text):
-        if not extracted_text.strip():
-            logger.warning("No text for Gemini processing")
-            return []
-
-        prompt = f"""
-            Analyze the following bill text. It may come from an image or PDF, and there may be multiple bills. Treat each bill separately.
-
-            {extracted_text}
-
-            Instructions:
-            1. Extract the invoice date (any format but). Use the most recent date from text and and consider the fact that we're targetating indian user so most common formate in bill will be dd-mm-yyyy.
-            2. Extract the total amount (positive, non-zero). If multiple, choose the most accurate.
-            3. Classify the bill into one of the following categories:
-            Food (exclude groceries), Groceries, Utilities, Travel, Transportation (fuel included), Shopping, Health, Education, Entertainment, Personal Care (gym too), EMI, Rent, Other.
-            4. Confidence level based on clarity: high/medium/low.
-
-            Return only a JSON array with these details:
-            [
-                {{
-                    "invoice_date": "YYYY-MM-DD",
-                    "category": "category_from_list",
-                    "total_amount": number_without_currency_symbol,
-                    "confidence": "high/medium/low"
-                }}
-            ]
-
-            if you think its not a bill, return "No bill in file" for images/PDFs. For PDFs with some non-bill pages, return null for those pages and state "n page has no bill"
-            If category or total_amount is missing return "no bill found" and retrun this json format :-
-
-            {{
-                "invoice_date": null,
-                "category": null,
-                "total_amount": null,
-                "confidence": "no bill"
-            }}
-        """
-
+    
+    def extract_bill_data(self, file_data, content_type):
         try:
-            response = self.model.generate_content([prompt])
+            image_parts = [{"mime_type": content_type, "data": file_data}]
+            
+            prompt = """
+                Analyze the content of the provided file.
+                If it is an image, assume it contains one bill.
+                If it is a PDF, it may contain multiple bills. Treat each bill or distinct page/section separately.
+
+                For each bill or distinct page/section extract the following:-
+
+                1. Extract the invoice date. Use the most recent date if multiple. Output format: YYYY-MM-DD.
+                2. Extract the total amount (positive, non-zero). If multiple, choose the most accurate.
+                3. Classify the bill into one of these categories: Food (prepared), Groceries, Utilities, Travel, Transportation (fuel incl), Shopping, Health, Education, Entertainment, Personal Care, EMI, Rent, Other.
+                4. Confidence level based on clarity: high/medium/low.
+
+                Output: Return a JSON array.
+
+                If for a bill/section: Category (3) AND Total (2) are valid: Add { "invoice_date": "YYYY-MM-DD", "category": "category_from_list", "total_amount": number_without_currency_symbol, "confidence": "high/medium/low" } to array.
+
+                Else (Category (3) OR Total (2) missing/invalid, OR section has no bill): Add { "invoice_date": null, "category": null, "total_amount": null, "confidence": "no bill" } to array.
+
+                If entire content has no segments: Return [].
+            """
+            
+            logger.info("Sending file to Gemini for direct processing")
+            response = self.model.generate_content([prompt, *image_parts])
             response_text = response.text.strip()
+            logger.info(f"Gemini raw response: {response_text}")
+            
+            # Clean and parse the response
             response_text = response_text.replace('```json', '').replace('```', '').strip()
-            result = json.loads(response_text)
-
-            upload_date = datetime.now().strftime("%Y-%m-%d")
-            for item in result:
-                if item.get("invoice_date") in [None, "", "null"]:
-                    item["invoice_date"] = upload_date
-
-            return result
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON from Gemini: {response_text}, Error: {e}")
-            return []
+            logger.info(f"Cleaned response: {response_text}")
+            
+            try:
+                result = json.loads(response_text)
+                logger.info(f"Parsed JSON result: {json.dumps(result, indent=2)}")
+                
+                # Handle default date if needed
+                upload_date = datetime.now().strftime("%Y-%m-%d")
+                for item in result:
+                    if isinstance(item, dict) and item.get("invoice_date") in [None, "", "null"]:
+                        item["invoice_date"] = upload_date
+                
+                # Filter out invalid bills
+                valid_bills = [bill for bill in result if isinstance(bill, dict) and 
+                              bill.get("total_amount") is not None and
+                              bill.get("category") is not None and
+                              bill.get("confidence") != "no bill"]
+                
+                logger.info(f"Found {len(valid_bills)} valid bills")
+                return valid_bills
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON from Gemini: {response_text}, Error: {e}")
+                return []
         except Exception as e:
             logger.error(f"Gemini API error: {e}")
             return []
-
 
 # Route Decorators
 def handle_timeout(func):
@@ -502,35 +513,38 @@ def upload_bill():
         return redirect(url_for('dashboard'))
 
     try:
+        logger.info(f"Processing file: {file.filename}, type: {file.content_type}")
         bill_processor = BillProcessor()
         
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             file.save(tmp_file.name)
+            logger.info(f"File saved to temporary location: {tmp_file.name}")
             
+            # Process file and get bill data directly
             if file.filename.lower().endswith('.pdf'):
-                extracted_text = bill_processor.process_pdf(tmp_file.name)
+                logger.info("Processing as PDF file")
+                results = bill_processor.process_pdf(tmp_file.name)
             else:
+                logger.info("Processing as image file")
                 file.seek(0) 
-                extracted_text = bill_processor.process_image(file)
-
-
+                results = bill_processor.process_image(file)
+            
             os.unlink(tmp_file.name)
-
-            if not extracted_text:
-                flash('Could not extract text from file', 'info')
-                return redirect(url_for('dashboard'))
-
-            results = bill_processor.process_text_with_gemini(extracted_text)
+            logger.info("Temporary file deleted")
 
             if not results:
                 flash('No bill information could be extracted', 'info')
+                logger.warning("No bill information returned from Gemini")
                 return redirect(url_for('dashboard'))
 
+            logger.info(f"Processing {len(results)} bills")
+            
             db = get_db()
             try:
                 with db.cursor() as cursor:
-                    for bill in results:
+                    for i, bill in enumerate(results):
                         if bill.get('total_amount') and bill.get('category'):
+                            logger.info(f"Saving bill {i+1}: {json.dumps(bill)}")
                             cursor.execute("""
                                 INSERT INTO Bill (user_id, total_amount, category, invoice_date, confidence_level)
                                 VALUES (%s, %s, %s, %s, %s)
@@ -541,15 +555,27 @@ def upload_bill():
                                 bill['invoice_date'],
                                 bill['confidence']
                             ))
+                        else:
+                            logger.warning(f"Skipping bill {i+1} due to missing required fields: {json.dumps(bill)}")
                 db.commit()
-                flash('Bill processed successfully!', 'success')
+                logger.info("All bills saved to database successfully")
+
+                # Add notification about the month of the uploaded bill
+                if results and len(results) > 0 and 'invoice_date' in results[0]:
+                    bill_month_date = datetime.strptime(results[0]['invoice_date'], '%Y-%m-%d')
+                    bill_month_name = bill_month_date.strftime('%B %Y')
+                    flash(f'Bill processed successfully for {bill_month_name}!', 'success')
+                else:
+                    flash('Bill processed successfully!', 'success')
+
+                return redirect(url_for('dashboard'))
             except Exception as db_error:
                 db.rollback()
                 logger.error(f"Database error: {db_error}")
                 flash('Unable to save bill data', 'info')
 
     except Exception as e:
-        logger.error(f"Bill processing error: {e}")
+        logger.error(f"Bill processing error: {e}", exc_info=True)
         flash('Unable to process bill', 'info')
 
     return redirect(url_for('dashboard'))
@@ -864,9 +890,9 @@ def health_check():
 if __name__ == '__main__':
     with app.app_context():
         init_db_pool()
-    port = int(os.getenv('PORT', 5000))
+    port = int(os.getenv('PORT', 5002))
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=False
+        debug=True 
     )

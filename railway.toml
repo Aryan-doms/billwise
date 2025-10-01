@@ -3,6 +3,5 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "gunicorn src.app:app"
-restartPolicy = "on-failure"
 healthcheckPath = "/health"
 memoryLimit = "200MB"

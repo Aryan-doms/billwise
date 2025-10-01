@@ -101,7 +101,7 @@
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
                         <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Total Spent</h3>
-                        <p class="text-base md:text-2xl font-bold text-blue-600">₹{{ total_sum }}</p>
+                        <p class="text-base md:text-2xl font-bold text-blue-600">₹{{ total_sum | format_number }}</p>
                     </div>
                     <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center">
                         <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget</h3>
@@ -109,7 +109,7 @@
                     </div>                    
                     <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
                         <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Remaining</h3>
-                        <p class="text-base md:text-2xl font-bold text-green-600">₹{{ budget_remaining }}</p>
+                        <p class="text-base md:text-2xl font-bold text-green-600">₹{{ budget_remaining | format_number }}</p>
                     </div>
                     <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
                         <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Used</h3>
@@ -124,7 +124,7 @@
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                         <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
                             <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Total Spent</h3>
-                            <p class="text-base md:text-2xl font-bold text-blue-600">₹{{ yearly_expenses }}</p>
+                            <p class="text-base md:text-2xl font-bold text-blue-600">₹{{ yearly_expenses | format_number }}</p>
                         </div>
                         <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
                             <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Total Budget</h3>
@@ -132,7 +132,7 @@
                         </div>
                         <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
                             <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Remaining</h3>
-                            <p class="text-base md:text-2xl font-bold text-green-600">₹{{ yearly_remaining }}</p>
+                            <p class="text-base md:text-2xl font-bold text-green-600">₹{{ yearly_remaining | format_number }}</p>
                         </div>
                         <div class="bg-white shadow-md rounded-xl p-4 md:p-6 text-center transform transition hover:scale-105 duration-300">
                             <h3 class="text-sm md:text-lg font-semibold text-gray-600 mb-2">Budget Used</h3>
