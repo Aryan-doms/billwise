@@ -55,15 +55,13 @@ def init_db_pool():
     global db_pool
     if db_pool is None:
         try:
-            # Increase pool size from 4 to 10
+            # Optimized for Supabase transaction pooler
             db_pool = ThreadedConnectionPool(
                 minconn=1,    
-                maxconn=10,   # Increased from 4 to 10
+                maxconn=5,   # Reduced for transaction pooler
                 dsn=DATABASE_URL,
-                keepalives=1,
-                keepalives_idle=30,
-                keepalives_interval=10,
-                keepalives_count=5
+                # Remove keepalives for transaction pooler compatibility
+                options='-c default_transaction_isolation=read_committed'
             )
             logger.info("Database connection pool initialized")
         except Exception as e:
