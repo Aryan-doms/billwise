@@ -878,13 +878,17 @@ def monthly_summary():
 
 @app.route('/health')
 def health_check():
+    return jsonify({"status": "healthy"}), 200
+
+@app.route('/health/db')
+def health_check_db():
     try:
         db = get_db()
         with db.cursor() as cursor:
             cursor.execute('SELECT 1')
-        return jsonify({"status": "healthy"}), 200
+        return jsonify({"status": "healthy", "database": "connected"}), 200
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        logger.error(f"Database health check failed: {e}")
         return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
 if __name__ == '__main__':
